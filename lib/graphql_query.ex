@@ -1,10 +1,11 @@
 defmodule GraphqlQuery do
-  @moduledoc """
-  Elixir tools for validating and formatting GraphQL queries.
+  @external_resource "README.md"
 
-  This module provides a high-level API for GraphQL query processing,
-  backed by a high-performance Rust implementation.
-  """
+  @moduledoc "README.md"
+             |> File.read!()
+             |> String.split("<!-- MDOC -->")
+             |> Enum.fetch!(1)
+
 
   alias GraphqlQuery.Native
 

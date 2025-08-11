@@ -24,3 +24,4 @@ graphql_query-*.tar
 *~undo-tree~
 native/*/target
 priv/**/*.so
+checksum*

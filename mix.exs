@@ -10,9 +10,11 @@ defmodule GraphqlQuery.MixProject do
     [
       app: :graphql_query,
       version: @version,
+      description: "GraphQL query validation and formatting utilities.",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      docs: docs(),
       package: package(),
       compilers: Mix.compilers()
     ]
@@ -29,7 +31,18 @@ defmodule GraphqlQuery.MixProject do
   defp deps do
     [
       {:rustler_precompiled, "~> 0.8"},
-      {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)}
+      {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)},
+
+      # Release deps
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+    ]
+  end
+
+  defp docs do
+    [
+      main: "GraphqlQuery",
+      source_ref: "v#{@version}",
+      source_url: @source_url
     ]
   end
 
@@ -37,9 +50,12 @@ defmodule GraphqlQuery.MixProject do
     [
       files: [
         "lib",
-        "native",
+        "native/graphql_query_native/.cargo",
+        "native/graphql_query_native/Cargo*",
+        "native/graphql_query_native/src",
         "checksum-*.exs",
-        "mix.exs"
+        "mix.exs",
+        "README.md"
       ],
       licenses: ["Beerware"],
       links: %{"GitHub" => @source_url},
