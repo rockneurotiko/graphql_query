@@ -10,3 +10,9 @@ crate-type = ["cdylib"]
 [dependencies]
 rustler = "0.34"
 apollo-compiler = "1.0"
+
+# And then, your features.
+[features]
+default = ["nif_version_2_17"]
+nif_version_2_16 = ["rustler/nif_version_2_16"]
+nif_version_2_17 = ["rustler/nif_version_2_17"]

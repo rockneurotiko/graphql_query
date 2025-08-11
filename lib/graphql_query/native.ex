@@ -3,9 +3,31 @@ defmodule GraphqlQuery.Native do
   Native interface to Rust functions for GraphQL query validation and formatting.
   """
 
-  use Rustler,
+  mix_config = Mix.Project.config()
+  version = mix_config[:version]
+  github_url = mix_config[:package][:links]["GitHub"]
+  # Since Rustler 0.27.0, we need to change manually the mode for each env.
+  # We want "debug" in dev and test because it's faster to compile.
+  mode = if Mix.env() in [:dev, :test], do: :debug, else: :release
+
+  use RustlerPrecompiled,
     otp_app: :graphql_query,
-    crate: "graphql_query_native"
+    crate: "graphql_query_native",
+    base_url: "#{github_url}/releases/download/v#{version}",
+    force_build: System.get_env("FORCE_BUILD") in ["1", "true"],
+    mode: mode,
+    targets: ~w(
+      aarch64-apple-darwin
+      aarch64-unknown-linux-gnu
+      aarch64-unknown-linux-musl
+      x86_64-apple-darwin
+      x86_64-pc-windows-msvc
+      x86_64-pc-windows-gnu
+      x86_64-unknown-linux-gnu
+      x86_64-unknown-linux-musl
+      x86_64-unknown-freebsd
+    ),
+    version: version
 
   @doc """
   Validates a GraphQL query string with a document path.

@@ -16,7 +16,7 @@ fn parse_query(query: &str, path: &str) -> Result<Document, Vec<String>> {
             let error_messages: Vec<String> = parse_result
                 .errors
                 .iter()
-                .map(|err| format!("{}", err))
+                .map(|err| format!("{err}"))
                 .collect();
             Err(error_messages)
         }
@@ -37,7 +37,7 @@ fn validate_query(query: String, path: String) -> Result<rustler::Atom, Vec<Stri
         Err(validation_errors) => {
             let error_messages: Vec<String> = validation_errors
                 .iter()
-                .map(|err| format!("{}", err))
+                .map(|err| format!("{err}"))
                 .collect();
             Err(error_messages)
         }
@@ -55,7 +55,7 @@ fn format_query(query: String) -> String {
     };
 
     // Use apollo_compiler's built-in Display trait for formatting
-    format!("{}", document)
+    format!("{document}")
 }
 
 // Do not add the methods here, they are automatically added by Rustler

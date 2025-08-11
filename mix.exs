@@ -1,15 +1,20 @@
 defmodule GraphqlQuery.MixProject do
   use Mix.Project
 
+  @version File.read!("VERSION") |> String.trim()
+  @source_url "https://github.com/rockneurotiko/graphql_query"
+  @dev? String.ends_with?(@version, "-dev")
+  @force_build? System.get_env("FORCE_BUILD") in ["1", "true"]
+
   def project do
     [
       app: :graphql_query,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      compilers: Mix.compilers(),
-      rustler_crates: rustler_crates()
+      package: package(),
+      compilers: Mix.compilers()
     ]
   end
 
@@ -23,23 +28,22 @@ defmodule GraphqlQuery.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:rustler, "~> 0.34"}
+      {:rustler_precompiled, "~> 0.8"},
+      {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)}
     ]
   end
 
-  defp rustler_crates do
+  defp package do
     [
-      graphql_query_native: [
-        path: "native/graphql_query_native",
-        mode: rustler_mode()
-      ]
+      files: [
+        "lib",
+        "native",
+        "checksum-*.exs",
+        "mix.exs"
+      ],
+      licenses: ["Beerware"],
+      links: %{"GitHub" => @source_url},
+      maintainers: ["Rock Neurotiko"]
     ]
-  end
-
-  defp rustler_mode do
-    case Mix.env() do
-      :prod -> :release
-      _ -> :debug
-    end
   end
 end
