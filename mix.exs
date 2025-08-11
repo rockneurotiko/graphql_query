@@ -49,10 +49,11 @@ defmodule GraphqlQuery.MixProject do
   defp package do
     [
       files: [
-        "lib",
-        "native/graphql_query_native/.cargo",
-        "native/graphql_query_native/Cargo*",
-        "native/graphql_query_native/src",
+        "lib/**/*.ex",
+        "native/graphql_query_native/.cargo/config",
+        "native/graphql_query_native/Cargo.lock",
+        "native/graphql_query_native/Cargo.toml",
+        "native/graphql_query_native/src/**/*.rs",
         "checksum-*.exs",
         "mix.exs",
         "README.md"
