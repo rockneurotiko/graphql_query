@@ -11,7 +11,7 @@ on:
       - ".github/workflows/release.yml"
     tags:
       - '*'
-    pull_request:
+  pull_request:
     paths:
       # In PRs we only run if this file changes.
       - ".github/workflows/release.yml"
