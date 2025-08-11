@@ -1,0 +1,12 @@
+[package]
+name = "graphql_query_native"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "graphql_query_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.34"
+apollo-compiler = "1.0"
