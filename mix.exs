@@ -56,7 +56,8 @@ defmodule GraphqlQuery.MixProject do
         "native/graphql_query_native/src/**/*.rs",
         "checksum-*.exs",
         "mix.exs",
-        "README.md"
+        "README.md",
+        "VERSION"
       ],
       licenses: ["Beerware"],
       links: %{"GitHub" => @source_url},
