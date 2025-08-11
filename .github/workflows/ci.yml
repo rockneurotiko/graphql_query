@@ -1,0 +1,55 @@
+name: Elixir CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FORCE_BUILD: true
+  MIX_ENV: test
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - otp_version: "27.2"
+            elixir_version: 1.18
+
+    runs-on: ubuntu-latest
+    name: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            _build/test/lib/graphql_query/native/graphql_query_native
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: test-native-${{ runner.os }}-${{ hashFiles('native/**/Cargo.lock') }}
+          restore-keys: |
+            test-native-${{ runner.os }}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          elixir-version: ${{ matrix.elixir_version }}
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Compile deps
+        run: mix deps.compile
+
+      - name: Run tests
+        run: mix test --warnings-as-errors
+
+      - name: Compile once again but without optional deps
+        run: mix compile --force --warnings-as-errors --no-optional-deps
+
+      - run: mix format --check-formatted

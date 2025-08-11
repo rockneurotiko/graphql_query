@@ -6,7 +6,6 @@ defmodule GraphqlQuery do
              |> String.split("<!-- MDOC -->")
              |> Enum.fetch!(1)
 
-
   alias GraphqlQuery.Native
 
   @doc """
