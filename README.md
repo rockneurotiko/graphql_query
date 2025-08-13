@@ -14,7 +14,7 @@ GraphqlQuery provides:
 
 - **GraphQL query validation** - Comprehensive validation including syntax, unused variables, and GraphQL specification compliance
 - **Query formatting** - Pretty-print GraphQL queries with consistent indentation and structure
-- **Compile-time validation** - Use the `~GQL` sigil to validate queries at compile time with helpful warnings
+- **Compile-time validation** - Use the `~GQL` sigil for static queries or the `gql` macro for dynamic queries with compile-time validation
 - **Mix format integration** - Format `.graphql` and `.gql` files with `mix format`
 
 The library combines Elixir's developer-friendly API with Rust's parsing performance, using RustlerPrecompiled for easy installation without requiring users to have Rust installed.
@@ -37,14 +37,14 @@ No additional setup required - the library uses precompiled Rust binaries via Ru
 
 ## Usage
 
-### The `~GQL` Sigil
+### The `~GQL` Sigil and `gql` Macro
 
-Import the sigil to validate GraphQL queries at compile time:
+Import to use both the sigil and macro for GraphQL query validation:
 
 ```elixir
 import GraphqlQuery
 
-# Valid query - no warnings
+# Static query with ~GQL sigil - validates at compile time
 query = ~GQL"""
 query GetUser($id: ID!) {
   user(id: $id) {
@@ -59,6 +59,14 @@ query GetUser($id: ID!) {
 }
 """
 
+# Dynamic query with gql macro - can expand variables at compile time
+user_id = "123"
+dynamic_query = gql "query GetUser { user(id: \"#{user_id}\") { name } }"
+
+# Use evaluate option to expand function calls at compile time
+get_user_id = fn -> "456" end
+compile_time_query = gql [evaluate: true], "query GetUser { user(id: \"#{get_user_id.()}\") { name } }"
+
 # Invalid query - shows compile warning
 invalid_query = ~GQL"""
 query GetUser($unused: String!) {
@@ -71,7 +79,18 @@ query GetUser($unused: String!) {
 # Error: unused variable: `$unused` at /path/to/file.ex:10:1 - variable is never used
 ```
 
-The sigil validates queries during compilation and prints helpful warnings for any validation errors, while still returning the query string for runtime use.
+#### `~GQL` Sigil
+- For **static queries only** - no dynamic parts allowed
+- Validates at compile time with helpful warnings
+- Returns the query string for runtime use
+
+#### `gql` Macro
+- Handles **dynamic queries** with string interpolation
+- Options:
+  - `evaluate: true` - Try to evaluate function calls at compile time
+  - `runtime: true` - Validate at runtime instead of compile time
+  - `ignore: true` - Skip validation and warnings
+- Expands variables and validates when possible at compile time
 
 ### GraphQL Query Examples
 
@@ -204,6 +223,7 @@ GraphqlQuery.format("query GetUser($id: ID!){user(id: $id){name email}}")
 
 - [X] Validate graphql queries with a sigil
 - [X] Format graphql queries with a formatter plugin
+- [X] Add `gql` macro that allows expanding compile time variables and dynamic parts
 - [ ] Manage graphql schemas, and optionally use it to parse and validate queries
 - [ ] Optional validation in compile time, and instead provide a mix task to validate all queries
 
