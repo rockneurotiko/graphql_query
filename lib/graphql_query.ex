@@ -295,7 +295,7 @@ defmodule GraphqlQuery do
     """
     [GraphqlQuery] Could not expand the part #{Macro.to_string(ast)} at compile time.
 
-    To try to evaluate calls at compile time with the `evaluate: true` option.
+    To try to evaluate calls at compile time, use the `evaluate: true` option.
     To validate in runtime, use the `runtime: true` option.
     To ignore this warning, use the `ignore: true` option.
     """
