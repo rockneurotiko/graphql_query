@@ -164,7 +164,7 @@ query GetUser($id: ID!) {
 
 #### `priv/graphql/create_user.gql`:
 ```graphql
-mutation CreateUser($id: ID!, name: String!, email: String!) {
+mutation CreateUser($id: ID!, $name: String!, $email: String!) {
   createUser(id: $id, name: $name, email: $email) {
     user {
       id
