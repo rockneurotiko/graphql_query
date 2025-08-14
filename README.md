@@ -122,7 +122,7 @@ query GetUser($id: ID!) {
 
 ### `gql_from_file` Macro
 
-`Load and validate GraphQL queries from external files at compile time. This macro is ideal for organizing complex queries in separate `.graphql` or `.gql` files while still getting compile-time validation.
+Load and validate GraphQL queries from external files at compile time. This macro is ideal for organizing complex queries in separate `.graphql` or `.gql` files while still getting compile-time validation.
 
 #### Features:
 - **File-based queries** - Keep GraphQL queries in separate files for better organization
