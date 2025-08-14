@@ -62,7 +62,8 @@ fn validate_query(query: String, path: String) -> Result<rustler::Atom, Vec<Vali
                     let json_error = err.to_json();
 
                     let message = json_error.message;
-                    let locations = json_error.locations
+                    let locations = json_error
+                        .locations
                         .iter()
                         .map(|loc| Location {
                             line: loc.line,
