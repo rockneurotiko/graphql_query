@@ -137,7 +137,7 @@ The macro automatically adds the file as an external resource, so your applicati
 
 #### Usage:
 
-The path is relative to your application initial directoly, not the file's firectory
+The path is relative to your application initial directory, not the file's directory
 
 #### Example file structure:
 ```
