@@ -1,5 +1,5 @@
 # Used by "mix format"
-local_macros = [gql: 1, gql: 2]
+local_macros = [gql: 1, gql: 2, gql_from_file: 1, gql_from_file: 2]
 
 [
   inputs: [

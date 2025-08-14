@@ -22,9 +22,25 @@ defmodule GraphqlQuery do
     end
   end
 
-  defmacro gql(opt \\ [], ast)
+  defmacro gql_from_file(file_path, opts \\ []) do
+    Module.put_attribute(__CALLER__.module, :external_resource, file_path)
 
-  defmacro gql(opts, ast) when is_binary(ast) do
+    ignore? = get_option(opts, :ignore, false, __CALLER__)
+
+    contents = File.read!(file_path)
+
+    location_info = [file: file_path]
+
+    if not ignore? do
+      do_validate(contents, file_path, location_info)
+    end
+
+    contents
+  end
+
+  defmacro gql(opts \\ [], ast)
+
+  defmacro gql(opts, query) when is_binary(query) do
     caller = __CALLER__
     file = caller.file
     warn_location = warn_location([], caller)
@@ -42,19 +58,26 @@ defmodule GraphqlQuery do
         """,
         warn_location
       )
+
+      do_validate(query, file, warn_location)
     end
 
-    do_validate(ast, file, warn_location)
-
-    ast
+    query
   end
 
   defmacro gql(opts, {:<<>>, meta, parts} = original) do
     # String with dynamic parts
+    do_gql(original, parts, __CALLER__, meta, opts)
+  end
 
-    caller = __CALLER__
+  defmacro gql(opts, {_, meta, _} = ast) do
+    # Method or module attribute call
+    do_gql(ast, [ast], __CALLER__, meta, opts)
+  end
+
+  defp do_gql(original, parts, caller, meta, opts) do
     file = caller.file
-    warn_location = warn_location(meta, caller)
+    warn_location = warn_location(meta, caller, -4)
     evaluate? = get_option(opts, :evaluate, false, caller)
     ignore? = get_option(opts, :ignore, false, caller)
     runtime_validation? = get_option(opts, :runtime, false, caller)
@@ -95,18 +118,25 @@ defmodule GraphqlQuery do
         quote do
           require Logger
           calculated_query = unquote(original)
+          file_path = unquote(warn_location)[:file]
 
           case Validator.validate(calculated_query, unquote(file)) do
             :ok ->
               :ok
 
             {:error, errors} ->
-              error_strings = Enum.join(errors, "\n")
+              Enum.each(errors, fn error ->
+                error =
+                  GraphqlQuery.Parser.format_error(
+                    error,
+                    unquote(warn_location),
+                    fn loc ->
+                      "Runtime Validation error @ #{file_path}:#{loc[:line]}:#{loc[:column]} ->"
+                    end
+                  )
 
-              Logger.warning(
-                "[GraphqlQuery] GraphQL runtime validation errors:\n#{error_strings}",
-                unquote(warn_location)
-              )
+                Logger.warning(error.message, error.location)
+              end)
           end
 
           calculated_query
@@ -120,90 +150,10 @@ defmodule GraphqlQuery do
         # We have dynamic parts, no runtime validation and we don't ignore it, so print a warning
 
         Enum.each(dynamic_parts, fn expr ->
-          evaluate_msg =
-            if not evaluate?,
-              do:
-                "You can try to evaluate calls at compile time with the [evaluate: true] option."
-
-          msg_parts = [
-            "Could not expand #{Macro.to_string(expr)} at compile time.",
-            evaluate_msg,
-            "To validate in runtime, use the [runtime: true] option.",
-            "To disable this warning, use the [ignore: true] option."
-          ]
-
-          msg = msg_parts |> Enum.reject(&is_nil/1) |> Enum.join("\n\n")
-
-          IO.warn(msg, warn_location)
+          IO.warn(error_msg(expr, evaluate?), warn_location(expr, caller))
         end)
 
         original
-    end
-  end
-
-  defmacro gql(opts, {_, meta, _} = ast) do
-    # Method or module attribute call
-
-    caller = __CALLER__
-    file = caller.file
-    evaluate? = get_option(opts, :evaluate, false, caller)
-    runtime_validation? = get_option(opts, :runtime, false, caller)
-    ignore? = get_option(opts, :ignore, false, caller)
-
-    warn_location = warn_location(meta, caller)
-
-    {compile_time_str, has_runtime?} =
-      case expand_until_string(ast, caller, evaluate?) |> dbg() do
-        {:ok, value} ->
-          {value, false}
-
-        :error ->
-          if not ignore? and not runtime_validation? do
-            IO.warn(
-              """
-              Could not expand #{Macro.to_string(ast)} at compile time.
-
-              To validate in runtime, use the `runtime: true` option.
-
-              To try to evaluate calls at compile time, use the `evaluate: true` option.
-
-              To disable this warning, use the `ignore: true` option.
-              """,
-              warn_location
-            )
-          end
-
-          {ast, true}
-      end
-
-    cond do
-      has_runtime? and runtime_validation? ->
-        # Validate on runtime
-
-        quote do
-          case Validator.validate(unquote(ast), unquote(file)) do
-            :ok ->
-              :ok
-
-            {:error, errors} ->
-              error_strings = Enum.join(errors, "\n")
-
-              IO.warn(
-                "[GraphqlQuery] GraphQL runtime validation errors:\n#{error_strings}",
-                unquote(warn_location)
-              )
-          end
-
-          unquote(ast)
-        end
-
-      has_runtime? ->
-        ast
-
-      true ->
-        do_validate(compile_time_str, file, warn_location)
-
-        ast
     end
   end
 
@@ -234,10 +184,10 @@ defmodule GraphqlQuery do
       Parser.has_dynamic_parts?(query) and not ignore? ->
         msg = """
         [GraphqlQuery] GraphQL query contains dynamic parts.
-
-        Use the "gql" macro instead to expand them and validate the query.
-
-        To disable this warning, use the `i` modifier: ~g"{}"#{opts}i
+        │
+        │ Use the "gql" macro instead to expand them and validate the query.
+        │
+        │ To disable this warning, use the `i` modifier: ~g"{}"#{opts}i
         """
 
         IO.warn(msg, warn_location)
@@ -252,16 +202,10 @@ defmodule GraphqlQuery do
             :ok
 
           {:error, errors} ->
-            error_strings = Enum.join(errors, "\n")
+            prefix =
+              "Validation errors, if you want to ignore them use the i modifier: ~G\"{}\"#{opts}i\n"
 
-            msg = """
-            GraphQL validation errors.
-            If you want to ignore the warning use the i modifier: ~G"{}"#{opts}i
-
-            #{error_strings}
-            """
-
-            IO.warn(msg, warn_location)
+            print_warnings(errors, warn_location, prefix)
         end
     end
 
@@ -269,8 +213,13 @@ defmodule GraphqlQuery do
     original
   end
 
-  defp warn_location(meta, %{line: line, file: file, function: function, module: module}) do
-    column = if column = meta[:column], do: column + 2
+  defp warn_location(meta, caller, shift \\ 0)
+
+  defp warn_location({_, meta, _}, caller, shift), do: warn_location(meta, caller, shift)
+
+  defp warn_location(meta, %{line: line, file: file, function: function, module: module}, shift) do
+    line = if meta[:line], do: meta[:line], else: line
+    column = if column = meta[:column], do: column + shift
     [line: line, function: function, module: module, file: file, column: column]
   end
 
@@ -315,12 +264,41 @@ defmodule GraphqlQuery do
         string
 
       {:error, errors} ->
-        error_strings = Enum.join(errors, "\n")
-
-        IO.warn("GraphQL validation errors:\n#{error_strings}", warn_location)
+        print_warnings(errors, warn_location, "Validation error:")
 
         string
     end
+  end
+
+  defp print_warnings(errors, warn_location, prefix) do
+    Enum.each(errors, fn error ->
+      error = Parser.format_error(error, warn_location, prefix)
+
+      IO.warn(error.message, error.location)
+    end)
+  end
+
+  defp error_msg(ast, true) do
+    # We tried to evaluate the query at compile time, but it failed
+
+    """
+    [GraphqlQuery] Could not expand and evaluate the part #{Macro.to_string(ast)} at compile time.
+
+    To validate in runtime, use the `runtime: true` option.
+    To ignore this warning, use the `ignore: true` option.
+    """
+  end
+
+  defp error_msg(ast, false) do
+    # We tried to expand, but not evaluate
+
+    """
+    [GraphqlQuery] Could not expand the part #{Macro.to_string(ast)} at compile time.
+
+    To try to evaluate calls at compile time with the `evaluate: true` option.
+    To validate in runtime, use the `runtime: true` option.
+    To ignore this warning, use the `ignore: true` option.
+    """
   end
 
   defp get_option(opts, key, default, caller) do

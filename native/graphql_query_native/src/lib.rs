@@ -1,5 +1,18 @@
 use apollo_compiler::ast::Document;
-use apollo_compiler::parser::Parser as ApolloCompilerParser;
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.Native.ValidationError"]
+pub struct ValidationError {
+    pub message: String,
+    pub locations: Vec<Location>,
+}
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.Native.Location"]
+pub struct Location {
+    pub line: usize,
+    pub column: usize,
+}
 
 mod atoms {
     rustler::atoms! {
@@ -9,8 +22,7 @@ mod atoms {
 }
 
 fn parse_query(query: &str, path: &str) -> Result<Document, Vec<String>> {
-    let mut parser = ApolloCompilerParser::new();
-    match parser.parse_ast(query, path) {
+    match Document::parse(query, path) {
         Ok(document) => Ok(document),
         Err(parse_result) => {
             let error_messages: Vec<String> = parse_result
@@ -24,22 +36,45 @@ fn parse_query(query: &str, path: &str) -> Result<Document, Vec<String>> {
 }
 
 #[rustler::nif]
-fn validate_query(query: String, path: String) -> Result<rustler::Atom, Vec<String>> {
+fn validate_query(query: String, path: String) -> Result<rustler::Atom, Vec<ValidationError>> {
     // Parse using apollo-compiler
     let document = match parse_query(&query, &path) {
         Ok(doc) => doc,
-        Err(parse_errors) => return Err(parse_errors),
+        Err(parse_errors) => {
+            let validation_errors: Vec<ValidationError> = parse_errors
+                .iter()
+                .map(|err_msg| ValidationError {
+                    message: err_msg.clone(),
+                    locations: vec![],
+                })
+                .collect();
+            return Err(validation_errors);
+        }
     };
 
     // Use apollo-compiler's standalone validation
     match document.validate_standalone_executable() {
         Ok(_) => Ok(atoms::ok()),
         Err(validation_errors) => {
-            let error_messages: Vec<String> = validation_errors
+            let structured_errors: Vec<ValidationError> = validation_errors
                 .iter()
-                .map(|err| format!("{err}"))
+                .map(|err| {
+                    let json_error = err.to_json();
+
+                    let message = json_error.message;
+                    let locations = json_error.locations
+                        .iter()
+                        .map(|loc| Location {
+                            line: loc.line,
+                            column: loc.column,
+                        })
+                        .collect();
+
+                    ValidationError { message, locations }
+                })
                 .collect();
-            Err(error_messages)
+
+            Err(structured_errors)
         }
     }
 }
