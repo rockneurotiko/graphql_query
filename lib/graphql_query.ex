@@ -226,24 +226,29 @@ defmodule GraphqlQuery do
   defp expand_until_string(ast, caller, evaluate?) do
     ast
     |> Macro.prewalker()
-    |> Enum.reduce_while(:error, fn expr, acc ->
-      case Macro.expand(expr, caller) do
-        string when is_binary(string) ->
-          {:halt, {:ok, string}}
+    |> Enum.reduce_while(:error, fn
+      string, acc when is_binary(string) ->
+        # We went too far
+        {:halt, acc}
 
-        ast ->
-          if evaluate? do
-            case evaluate_ast(ast, caller) do
-              {:ok, value} when is_binary(value) ->
-                {:halt, {:ok, value}}
+      expr, acc ->
+        case Macro.expand(expr, caller) do
+          string when is_binary(string) ->
+            {:halt, {:ok, string}}
 
-              _ ->
-                {:cont, acc}
+          ast ->
+            if evaluate? do
+              case evaluate_ast(ast, caller) do
+                {:ok, value} when is_binary(value) ->
+                  {:halt, {:ok, value}}
+
+                _ ->
+                  {:cont, acc}
+              end
+            else
+              {:cont, acc}
             end
-          else
-            {:cont, acc}
-          end
-      end
+        end
     end)
   end
 

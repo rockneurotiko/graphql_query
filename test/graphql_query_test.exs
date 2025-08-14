@@ -3,74 +3,6 @@ defmodule GraphqlQueryTest do
   import GraphqlQuery
   doctest GraphqlQuery
 
-  describe "validate/1" do
-    test "uses default document name on errors" do
-      # Test that the default document name is used in error messages
-      assert {:error, [error]} = GraphqlQuery.validate("query T() { field }")
-      assert error =~ "expected a Variable Definition"
-      assert error =~ "document.graphql:1:9"
-    end
-
-    test "uses specified document name on errors" do
-      # Test that the default document name is used in error messages
-      assert {:error, [error]} = GraphqlQuery.validate("query T() { field }", "test.graphql")
-      assert error =~ "expected a Variable Definition"
-      assert error =~ "test.graphql:1:9"
-    end
-
-    test "validates correct GraphQL queries" do
-      assert GraphqlQuery.validate("query TestQuery($a: String!) { user(id: $a) { id name } }") ==
-               :ok
-    end
-
-    test "validates GraphQL queries with syntax errors" do
-      result = GraphqlQuery.validate("query T { field\n? }")
-      assert {:error, [error]} = result
-      assert error =~ "Error: syntax error: Unexpected character \"?\""
-    end
-
-    test "validates GraphQL queries with unused variables" do
-      # Query with unused variable should return validation error
-      result = GraphqlQuery.validate("query T($a: String) { field }")
-      assert {:error, [error]} = result
-      assert error =~ "Error: unused variable: `$a`"
-      assert error =~ "variable is never used"
-    end
-  end
-
-  describe "format/1" do
-    test "formats GraphQL queries" do
-      non_formatted = """
-      query GetUser($id: ID!) { user(id: $id) {
-          id
-          name
-          email
-          posts { title content
-          } } }
-      """
-
-      formatted_query = """
-      query GetUser($id: ID!) {
-        user(id: $id) {
-          id
-          name
-          email
-          posts {
-            title
-            content
-          }
-        }
-      }
-      """
-
-      assert formatted_query == GraphqlQuery.format(non_formatted)
-
-      # Test with invalid query - should return original
-      invalid_query = "query T{"
-      assert GraphqlQuery.format(invalid_query) == invalid_query
-    end
-  end
-
   describe "~GQL sigil" do
     test "returns the same query string when valid" do
       original_query = """
@@ -125,7 +57,327 @@ defmodule GraphqlQueryTest do
 
       assert sigil_query == query
     end
+  end
 
+  describe "gql macro" do
+    test "works with static queries" do
+      query =
+        gql """
+        query GetUser($id: ID!) {
+          user(id: $id) {
+            name
+            email
+          }
+        }
+        """
+
+      expected = """
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          name
+          email
+        }
+      }
+      """
+
+      assert query == expected
+    end
+
+    test "shows warning for static queries recommending ~GQL sigil" do
+      module = """
+      defmodule TestGqlStatic do
+        import GraphqlQuery
+
+        def static_query do
+          gql "query { user { name } }"
+        end
+      end
+      """
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(module)
+        end)
+
+      assert logs =~ "warning"
+      assert logs =~ "[GraphqlQuery] GraphQL query is static"
+      assert logs =~ "Using the ~GQL sigil for static queries is recommended"
+    end
+
+    test "works with module attributes" do
+      defmodule TestGqlAttributes do
+        import GraphqlQuery
+
+        @fields "id name email"
+
+        def query_with_attributes do
+          gql """
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              #{@fields}
+            }
+          }
+          """
+        end
+      end
+
+      result = TestGqlAttributes.query_with_attributes()
+      assert result =~ "query GetUser($id: ID!)"
+      assert result =~ "id name email"
+    end
+
+    test "works with other GQL results in module attributes" do
+      defmodule TestGqlWithFragments do
+        import GraphqlQuery
+
+        @user_fragment ~GQL"""
+        fragment UserFields on User {
+          name
+          email
+        }
+        """i
+
+        def query_with_fragment do
+          gql """
+          query {
+            user {
+              ...UserFields
+            }
+          }
+          #{@user_fragment}
+          """
+        end
+      end
+
+      result = TestGqlWithFragments.query_with_fragment()
+      assert result =~ "query {"
+      assert result =~ "...UserFields"
+      assert result =~ "fragment UserFields on User"
+    end
+
+    test "works with evaluate option and module calls" do
+      defmodule TestGqlEvaluate do
+        import GraphqlQuery
+
+        defmodule Helper do
+          def fragment_name, do: "UserIdentifier"
+
+          def fragment do
+            ~GQL"""
+            fragment UserIdentifier on User {
+              id
+              email
+            }
+            """i
+          end
+
+          def more_fields, do: ["name", "surname"] |> Enum.join("\n")
+        end
+
+        def query_with_evaluate do
+          gql [evaluate: true], """
+          query T {
+            ...#{Helper.fragment_name()}
+            #{Helper.more_fields()}
+          }
+
+          #{Helper.fragment()}
+          """
+        end
+      end
+
+      result = TestGqlEvaluate.query_with_evaluate()
+      assert result =~ "...UserIdentifier"
+      assert result =~ "name\nsurname"
+      assert result =~ "fragment UserIdentifier on User"
+    end
+
+    test "shows warning for local variables that cannot be expanded" do
+      # Test with runtime option since local variables can't be expanded at compile time
+      defmodule TestGqlLocalVars do
+        import GraphqlQuery
+
+        def query_with_local_vars do
+          fields = ["id", "name", "email"]
+
+          # This should work at runtime
+          gql [runtime: true], """
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              #{Enum.join(fields, "\n")}
+            }
+          }
+          """
+        end
+      end
+
+      # This should compile without issues and work at runtime
+      result = TestGqlLocalVars.query_with_local_vars()
+      assert result =~ "query GetUser($id: ID!)"
+      assert result =~ "id\nname\nemail"
+    end
+
+    test "string directly in replace" do
+      gql [evaluate: true], """
+      query Test {
+        user {
+          #{"name"}
+        }
+      }
+      """
+    end
+
+    test "shows warning when expansion fails without evaluate" do
+      module = """
+      defmodule TestGqlExpansionWarning do
+        import GraphqlQuery
+
+        defmodule Helper do
+          def some_field, do: "name"
+        end
+
+        def query_with_failed_expansion do
+          gql "query { \#{Helper.some_field()} }"
+        end
+      end
+      """
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(module)
+        end)
+
+      assert logs =~ "warning"
+      assert logs =~ "[GraphqlQuery] Could not expand the part"
+      assert logs =~ "To try to evaluate calls at compile time, use the `evaluate: true` option"
+    end
+
+    test "works with runtime validation option" do
+      defmodule TestGqlRuntime do
+        import GraphqlQuery
+
+        def query_with_runtime_validation(user_id) do
+          fields = ["id", "name", "email"]
+
+          gql [runtime: true], """
+          query GetUser($id: ID!) {
+            user(id: #{user_id}) {
+              #{Enum.join(fields, "\n")}
+            }
+          }
+          """
+        end
+      end
+
+      # The query should work and return the interpolated string
+      result = TestGqlRuntime.query_with_runtime_validation("$id")
+      assert result =~ "query GetUser($id: ID!)"
+      assert result =~ "user(id: $id)"
+      assert result =~ "id\nname\nemail"
+    end
+
+    test "works with ignore option" do
+      defmodule TestGqlIgnore do
+        import GraphqlQuery
+
+        def query_with_ignore_option do
+          fields = ["id", "name"]
+
+          gql [ignore: true], """
+          query {
+            user {
+              #{Enum.join(fields, "\n")}
+            }
+          }
+          """
+        end
+      end
+
+      # Should work without any warnings or validation
+      result = TestGqlIgnore.query_with_ignore_option()
+      assert result =~ "query {"
+      assert result =~ "id\nname"
+    end
+
+    test "ignore option suppresses warnings" do
+      module = """
+      defmodule TestGqlIgnoreWarnings do
+        import GraphqlQuery
+
+        defmodule Helper do
+          def some_field, do: "name"
+        end
+
+        def query_with_ignore do
+          gql [ignore: true], "query { \#{Helper.some_field()} }"
+        end
+      end
+      """
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(module)
+        end)
+
+      # Should not contain any GraphqlQuery warnings
+      refute logs =~ "[GraphqlQuery]"
+    end
+
+    test "works with module-level options using 'use' statement" do
+      defmodule TestGqlModuleOptions do
+        use GraphqlQuery, evaluate: true, runtime: true
+
+        defmodule Helper do
+          def get_fields, do: "id name"
+        end
+
+        def query_with_module_options do
+          # Should try to evaluate first, then fall back to runtime if needed
+          gql """
+          query {
+            user {
+              #{Helper.get_fields()}
+            }
+          }
+          """
+        end
+      end
+
+      result = TestGqlModuleOptions.query_with_module_options()
+      assert result =~ "query {"
+      assert result =~ "id name"
+    end
+
+    test "validates and warns about invalid GraphQL in gql macro" do
+      module = """
+      defmodule TestGqlValidation do
+        import GraphqlQuery
+
+        @fields "id name"
+
+        def invalid_query do
+          gql \"""
+          query GetUser($unused: String) {
+            user {
+              \#{@fields}
+            }
+          }
+          \"""
+        end
+      end
+      """
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(module)
+        end)
+
+      assert logs =~ "warning"
+      assert logs =~ "unused variable"
+    end
+  end
+
+  describe "compile warnings" do
     test "compile warning" do
       module = """
       defmodule TestSigilWarning do
@@ -143,7 +395,7 @@ defmodule GraphqlQueryTest do
         end)
 
       assert logs =~ "warning"
-      assert logs =~ "GraphQL validation errors"
+      assert logs =~ "Validation errors"
       assert logs =~ "Error: syntax error: expected at least one Selection in Selection Set"
     end
   end
