@@ -8,5 +8,5 @@ local_macros = [gql: 1, gql: 2, gql_from_file: 1, gql_from_file: 2]
   ],
   plugins: [GraphqlQuery.Formatter],
   locals_without_parens: local_macros,
-  export: [local_without_parens: local_macros]
+  export: [locals_without_parens: local_macros]
 ]

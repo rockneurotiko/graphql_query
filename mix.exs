@@ -55,6 +55,7 @@ defmodule GraphqlQuery.MixProject do
         "native/graphql_query_native/Cargo.toml",
         "native/graphql_query_native/src/**/*.rs",
         "checksum-*.exs",
+        ".formatter.exs",
         "mix.exs",
         "README.md",
         "VERSION"
