@@ -6,6 +6,11 @@ defmodule GraphqlQuery.Formatter do
   end
 
   def format(contents, _opts) do
-    GraphqlQuery.format(contents)
+    if GraphqlQuery.Parser.has_dynamic_parts?(contents) do
+      # We don't try to format with dynamic parts, it can end with unexpected results
+      contents
+    else
+      GraphqlQuery.Format.format(contents)
+    end
   end
 end
