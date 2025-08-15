@@ -30,7 +30,7 @@ Add `graphql_query` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:graphql_query, "~> 0.1.0"}
+    {:graphql_query, "~> 0.2.0"}
   ]
 end
 ```
