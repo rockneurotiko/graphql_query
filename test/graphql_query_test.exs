@@ -60,16 +60,22 @@ defmodule GraphqlQueryTest do
   end
 
   describe "gql macro" do
-    test "works with static queries" do
-      query =
-        gql """
-        query GetUser($id: ID!) {
-          user(id: $id) {
-            name
-            email
+    test "warning for static queries" do
+      data = ~s/
+      defmodule TestGqlStatic do
+        import GraphqlQuery
+        def query do
+          gql """
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              name
+              email
+            }
           }
-        }
-        """
+          """
+        end
+      end
+     /
 
       expected = """
       query GetUser($id: ID!) {
@@ -80,7 +86,13 @@ defmodule GraphqlQueryTest do
       }
       """
 
-      assert query == expected
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          [{compiled_module, _}] = Code.compile_string(data)
+          assert compiled_module.query() == expected
+        end)
+
+      assert logs =~ "warning"
     end
 
     test "shows warning for static queries recommending ~GQL sigil" do
