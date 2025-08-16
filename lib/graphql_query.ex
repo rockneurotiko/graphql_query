@@ -254,14 +254,37 @@ defmodule GraphqlQuery do
 
   # Function calls
   defp evaluate_ast({{:., _, _}, _, _} = ast, caller) do
+    ensure_modules_loaded(ast)
     {value, _binding} = Code.eval_quoted(ast, [], caller)
     {:ok, value}
   rescue
-    _ ->
+    _e ->
       :error
   end
 
   defp evaluate_ast(_ast, _caller), do: :ignore
+
+  defp ensure_modules_loaded({:., _meta, [module | _]}) do
+    ensure_module_loaded(module)
+  end
+
+  defp ensure_modules_loaded({{:., _, _} = call_ast, _, asts}) do
+    ensure_modules_loaded(call_ast)
+    Enum.each(asts, &ensure_module_loaded/1)
+  end
+
+  defp ensure_modules_loaded({_, _meta, asts}) when is_list(asts) do
+    Enum.each(asts, &ensure_modules_loaded/1)
+  end
+
+  defp ensure_module_loaded({:__aliases__, _meta, [module | _] = parts}) when is_atom(module) do
+    parts |> Module.concat() |> ensure_module_loaded()
+  end
+
+  defp ensure_module_loaded(module) when is_atom(module) do
+    Code.ensure_compiled!(module)
+    Code.ensure_loaded!(module)
+  end
 
   defp do_validate(string, file, warn_location) do
     case Validator.validate(string, file) do
