@@ -13,7 +13,7 @@ defmodule GraphqlQuery.MixProject do
       version: @version,
       description:
         "Compile‑time and runtime safety for your GraphQL queries and schemas in Elixir.",
-      elixir: "~> 1.18",
+      elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       docs: docs(),
