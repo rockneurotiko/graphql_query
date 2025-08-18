@@ -44,14 +44,17 @@ defmodule GraphqlQuery.MixProject do
   defp docs do
     [
       main: "GraphqlQuery",
-      log: "graphql_query_exdoc.png",
+      logo: "graphql_query_exdoc.png",
       source_ref: "v#{@version}",
       source_url: @source_url,
       groups_for_modules: [
         GraphqlQuery: [
           GraphqlQuery,
           GraphqlQuery.Schema,
-          GraphqlQuery.MacroOptions
+          GraphqlQuery.MacroOptions,
+          GraphqlQuery.ValidationError,
+          GraphqlQuery.Location,
+          GraphqlQuery.Parser
         ],
         Format: [
           GraphqlQuery.Formatter,
@@ -59,10 +62,10 @@ defmodule GraphqlQuery.MixProject do
         ],
         "Manual Validation": [
           GraphqlQuery.Validator
+        ],
+        Native: [
+          GraphqlQuery.Native
         ]
-        # Native: [
-        #   GraphqlQuery.Native
-        # ]
       ]
     ]
   end
@@ -89,6 +92,11 @@ defmodule GraphqlQuery.MixProject do
   end
 
   defp aliases do
-    []
+    [
+      "rust.lint": [
+        "cmd cargo clippy --manifest-path=native/graphql_query_native/Cargo.toml -- -Dwarnings"
+      ],
+      "rust.fmt": ["cmd cargo fmt --manifest-path=native/graphql_query_native/Cargo.toml --all"]
+    ]
   end
 end

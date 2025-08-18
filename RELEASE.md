@@ -54,7 +54,7 @@ releasing is a bit more involved than it would be otherwise.
     1. Enter "Y" to confirm.
     1. Discard the auto-generated `.exs` file beginning with `checksum`.
 
-1. Bump the version in the `mix.exs` and add the `-dev` flag to the end.
+1. Bump the version in the `VERSION` file and add the `-dev` flag to the end.
 
     * Example: `0.3.0` to `0.3.1-dev`.
     * Can either open up a PR or push directly to `main`.
