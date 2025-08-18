@@ -1,4 +1,11 @@
 defmodule GraphqlQuery.Formatter do
+  @moduledoc """
+  Mix formatter plugin for GraphQL files and sigils.
+
+  Integrates with `mix format` to automatically format GraphQL queries in
+  .graphql/.gql files and ~GQL sigils. Skips formatting when queries contain
+  dynamic interpolation to avoid unexpected results.
+  """
   @behaviour Mix.Tasks.Format
 
   def features(_opts) do

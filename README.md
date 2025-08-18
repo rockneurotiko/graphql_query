@@ -1,4 +1,4 @@
-# GraphqlQuery
+<h1><p align="center"><img src="graphql_query.png" alt="GraphQL Query" width="300"></p></h1>
 
 ![CI](https://github.com/rockneurotiko/graphql_query/actions/workflows/ci.yml/badge.svg)
 [![Package](https://img.shields.io/hexpm/v/graphql_query.svg)](https://hex.pm/packages/graphql_query)
@@ -6,8 +6,7 @@
 
 <!-- MDOC -->
 
-Elixir tools for **validating, parsing, and formatting GraphQL queries and schemas**, backed by a Rust implementation for performance.
-Provides compile-time and runtime validation, schema-aware checks, and Mix formatter integration.
+GraphQL Query provides a library for **validating, parsing, and formatting GraphQL queries and schemas**
 
 ⚠️ **Disclaimer:** This library is still in early development. APIs may change as it evolves.
 
@@ -384,7 +383,7 @@ query GetUser($id: ID!) { user(id: $id) { name } }
 
 # Invalid query
 GraphqlQuery.Validator.validate("query T($unused: String) { field }")
-# => {:error, [%GraphqlQuery.Native.ValidationError{}]}
+# => {:error, [%GraphqlQuery.ValidationError{}]}
 
 # Validate a schema
 GraphqlQuery.Validator.validate(schema, schema_path, nil, :schema)

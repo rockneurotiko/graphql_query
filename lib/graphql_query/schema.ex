@@ -1,5 +1,24 @@
 defmodule GraphqlQuery.Schema do
   @moduledoc """
+  Behaviour and utilities for GraphQL schema management.
+
+  Defines the contract for modules that provide GraphQL schemas and includes
+  a `__using__` macro for easy schema module setup with automatic file loading
+  and validation.
+
+  ## Example
+
+      defmodule MyApp.Schema do
+        use GraphqlQuery.Schema, schema_path: "priv/schema.graphql"
+      end
+
+      # The schema will be automatically loaded from the file
+      MyApp.Schema.schema()
+      #=> "type Query { user(id: ID!): User } ..."
+
+      # Get the file path
+      MyApp.Schema.schema_path()
+      #=> "priv/schema.graphql"
 
   """
 

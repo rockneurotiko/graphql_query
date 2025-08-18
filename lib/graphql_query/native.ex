@@ -3,14 +3,6 @@ defmodule GraphqlQuery.Native do
   Native interface to Rust functions for GraphQL query validation and formatting.
   """
 
-  defmodule ValidationError do
-    defstruct message: "", locations: []
-  end
-
-  defmodule Location do
-    defstruct [:line, :column]
-  end
-
   mix_config = Mix.Project.config()
   version = mix_config[:version]
   github_url = mix_config[:package][:links]["GitHub"]
@@ -24,7 +16,7 @@ defmodule GraphqlQuery.Native do
     base_url: "#{github_url}/releases/download/v#{version}",
     force_build: System.get_env("FORCE_BUILD") in ["1", "true"],
     mode: mode,
-    nif_versions: ["2.17"],
+    nif_versions: ["2.17", "2.16", "2.15"],
     targets: ~w(
       aarch64-apple-darwin
       aarch64-unknown-linux-gnu

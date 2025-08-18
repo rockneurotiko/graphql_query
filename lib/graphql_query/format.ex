@@ -1,4 +1,11 @@
 defmodule GraphqlQuery.Format do
+  @moduledoc """
+  GraphQL query and schema formatting functionality.
+
+  Provides high-level formatting interface that delegates to the Rust-based
+  native implementation for optimal performance. Formats GraphQL queries and schemas
+  into a standardized, readable format.
+  """
   alias GraphqlQuery.Native
 
   @doc """

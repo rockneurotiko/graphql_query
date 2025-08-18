@@ -5,14 +5,14 @@ use apollo_compiler::ExecutableDocument;
 use apollo_compiler::Schema;
 
 #[derive(Debug, Clone, rustler::NifStruct)]
-#[module = "GraphqlQuery.Native.ValidationError"]
+#[module = "GraphqlQuery.ValidationError"]
 pub struct ValidationError {
     pub message: String,
     pub locations: Vec<Location>,
 }
 
 #[derive(Debug, Clone, rustler::NifStruct)]
-#[module = "GraphqlQuery.Native.Location"]
+#[module = "GraphqlQuery.Location"]
 pub struct Location {
     pub line: usize,
     pub column: usize,

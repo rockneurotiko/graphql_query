@@ -1,8 +1,15 @@
 defmodule GraphqlQuery.Validator do
+  @moduledoc """
+  GraphQL query and schema validation.
+
+  Provides validation functions for both GraphQL queries and schemas using
+  the high-performance Rust-based native implementation. Supports schema-aware
+  validation when a schema module is provided.
+  """
   alias GraphqlQuery.Native
 
   @type document_type :: :query | :schema
-  @type validation_error :: GraphqlQuery.Native.ValidationError.t()
+  @type validation_error :: GraphqlQuery.ValidationError.t()
 
   @doc """
   Validates a GraphQL query string.

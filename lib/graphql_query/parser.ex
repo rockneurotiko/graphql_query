@@ -1,4 +1,10 @@
 defmodule GraphqlQuery.Parser do
+  @moduledoc """
+  Utilities for parsing and analyzing GraphQL query strings.
+
+  Provides functionality to detect dynamic parts in queries and format
+  validation errors with proper location information.
+  """
   def has_dynamic_parts?(query) when is_binary(query) do
     # Check if the query contains any dynamic parts
     # Basic check now, because if it contains "\#{",
