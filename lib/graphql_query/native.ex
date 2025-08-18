@@ -16,7 +16,7 @@ defmodule GraphqlQuery.Native do
     base_url: "#{github_url}/releases/download/v#{version}",
     force_build: System.get_env("FORCE_BUILD") in ["1", "true"],
     mode: mode,
-    nif_versions: ["2.17"],
+    nif_versions: ["2.17", "2.16", "2.15"],
     targets: ~w(
       aarch64-apple-darwin
       aarch64-unknown-linux-gnu
