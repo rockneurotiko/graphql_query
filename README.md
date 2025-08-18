@@ -1,4 +1,4 @@
-<h1><img src="graphql_query.png" alt="GraphQL Query"></h1>
+<h1><img src="graphql_query.png" alt="GraphQL Query" width="200"></h1>
 
 ![CI](https://github.com/rockneurotiko/graphql_query/actions/workflows/ci.yml/badge.svg)
 [![Package](https://img.shields.io/hexpm/v/graphql_query.svg)](https://hex.pm/packages/graphql_query)
