@@ -12,7 +12,7 @@ defmodule GraphqlQuery.MixProject do
       app: :graphql_query,
       version: @version,
       description:
-        "Compile‑time and runtime safety for your GraphQL queries and schemas in Elixir.",
+        "GraphQL Query provides compile-time and runtime safety for your GraphQL queries and schemas in Elixir.",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -44,8 +44,26 @@ defmodule GraphqlQuery.MixProject do
   defp docs do
     [
       main: "GraphqlQuery",
+      log: "graphql_query_exdoc.png",
       source_ref: "v#{@version}",
-      source_url: @source_url
+      source_url: @source_url,
+      groups_for_modules: [
+        GraphqlQuery: [
+          GraphqlQuery,
+          GraphqlQuery.Schema,
+          GraphqlQuery.MacroOptions
+        ],
+        Format: [
+          GraphqlQuery.Formatter,
+          GraphqlQuery.Format
+        ],
+        "Manual Validation": [
+          GraphqlQuery.Validator
+        ]
+        # Native: [
+        #   GraphqlQuery.Native
+        # ]
+      ]
     ]
   end
 
