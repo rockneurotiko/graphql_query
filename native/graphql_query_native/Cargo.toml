@@ -1,6 +1,8 @@
 [package]
 name = "graphql_query_native"
-version = "0.3.0"
+# We don't use versioning in the in this crate.
+# Please check the `mix.exs` file at the root of this project for the current version.
+version = "0.1.0"
 edition = "2021"
 
 [lib]
