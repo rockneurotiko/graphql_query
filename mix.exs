@@ -53,9 +53,9 @@ defmodule GraphqlQuery.MixProject do
     [
       files: [
         "lib/**/*.ex",
-        "native/graphql_query_native/.cargo/config",
-        "native/graphql_query_native/Cargo.lock",
-        "native/graphql_query_native/Cargo.toml",
+        "native/graphql_query_native/.cargo/config.toml",
+        "native/graphql_query_native/*.lock",
+        "native/graphql_query_native/*.toml",
         "native/graphql_query_native/src/**/*.rs",
         "checksum-*.exs",
         ".formatter.exs",
