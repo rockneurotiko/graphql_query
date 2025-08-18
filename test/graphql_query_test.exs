@@ -408,7 +408,7 @@ defmodule GraphqlQueryTest do
 
       assert logs =~ "warning"
       assert logs =~ "Validation errors"
-      assert logs =~ "Error: syntax error: expected at least one Selection in Selection Set"
+      assert logs =~ "syntax error: expected at least one Selection in Selection Set"
     end
   end
 end

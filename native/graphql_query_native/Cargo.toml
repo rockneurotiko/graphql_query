@@ -8,11 +8,12 @@ name = "graphql_query_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = "0.34"
+rustler = { version = "0.36" }
 apollo-compiler = "1.0"
 
 # And then, your features.
 [features]
-default = ["nif_version_2_17"]
+default = ["nif_version_2_15"]
+nif_version_2_15 = ["rustler/nif_version_2_15"]
 nif_version_2_16 = ["rustler/nif_version_2_16"]
 nif_version_2_17 = ["rustler/nif_version_2_17"]

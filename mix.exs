@@ -8,10 +8,12 @@ defmodule GraphqlQuery.MixProject do
 
   def project do
     [
+      aliases: aliases(),
       app: :graphql_query,
       version: @version,
-      description: "GraphQL query validation and formatting utilities.",
-      elixir: "~> 1.18",
+      description:
+        "Compile‑time and runtime safety for your GraphQL queries and schemas in Elixir.",
+      elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       docs: docs(),
@@ -32,6 +34,7 @@ defmodule GraphqlQuery.MixProject do
     [
       {:rustler_precompiled, "~> 0.8"},
       {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)},
+      {:nimble_options, "~> 1.1"},
 
       # Release deps
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
@@ -58,11 +61,16 @@ defmodule GraphqlQuery.MixProject do
         ".formatter.exs",
         "mix.exs",
         "README.md",
-        "VERSION"
+        "VERSION",
+        "LICENSE"
       ],
       licenses: ["Beerware"],
       links: %{"GitHub" => @source_url},
       maintainers: ["Rock Neurotiko"]
     ]
+  end
+
+  defp aliases do
+    []
   end
 end

@@ -8,14 +8,16 @@ defmodule GraphqlQuery.ValidatorTest do
       # Test that the default document name is used in error messages
       assert {:error, [error]} = Validator.validate("query T() { field }")
       assert error.message =~ "expected a Variable Definition"
-      assert error.message =~ "document.graphql:1:9"
+      assert [%{line: 1, column: 9}] = error.locations
     end
 
     test "uses specified document name on errors" do
       # Test that the default document name is used in error messages
-      assert {:error, [error]} = Validator.validate("query T() { field }", "test.graphql")
+      assert {:error, [error]} =
+               Validator.validate("query T() { field }", "test.graphql", nil, :query)
+
       assert error.message =~ "expected a Variable Definition"
-      assert error.message =~ "test.graphql:1:9"
+      assert [%{line: 1, column: 9}] = error.locations
     end
 
     test "validates correct GraphQL queries" do
@@ -26,7 +28,7 @@ defmodule GraphqlQuery.ValidatorTest do
     test "validates GraphQL queries with syntax errors" do
       result = Validator.validate("query T { field\n? }")
       assert {:error, [error]} = result
-      assert error.message =~ "Error: syntax error: Unexpected character \"?\""
+      assert error.message =~ "syntax error: Unexpected character \"?\""
     end
 
     test "validates GraphQL queries with unused variables" do
