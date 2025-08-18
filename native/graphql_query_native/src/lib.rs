@@ -66,7 +66,7 @@ fn validate_query_without_schema(
     document
         .validate_standalone_executable()
         .map(|_| atoms::ok())
-        .map_err(|diagnostics| diagnostics_to_validation_errors(diagnostics))
+        .map_err(diagnostics_to_validation_errors)
 }
 
 fn validate_query_with_schema(
