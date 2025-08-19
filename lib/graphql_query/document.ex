@@ -1,6 +1,65 @@
 defmodule GraphqlQuery.Document do
   @moduledoc """
   Struct representation of a GraphQL query or mutation.
+
+  If you need to build documents or fragments manually, you can use this methods.
+
+  ## Example
+        # Fragments
+      iex> fragment = GraphqlQuery.Document.new("fragment UserFields on User { id name }", name: "UserFields", type: :fragment)
+      iex> fragment.name
+      "UserFields"
+      iex> fragment.query
+      "fragment UserFields on User { id name }"
+      iex> fragment.type
+      :fragment
+
+      # Queries
+      iex> query = GraphqlQuery.Document.new("query { user { ...UserFields } }", fragments: [fragment])
+      iex> query.query
+      "query { user { ...UserFields } }"
+      iex> query.type
+      :query
+      iex> to_string(query) # When conventing to string, it will include the fragments
+      "query { user { ...UserFields } }\n\nfragment UserFields on User { id name }"
+
+      # Schemas
+      iex> schema = GraphqlQuery.Document.new("schema { query: Query }", type: :schema)
+      iex> schema.query
+      "schema { query: Query }"
+      iex> schema.type
+      :schema
+
+      # Manupilate the documents
+      iex> query = GraphqlQuery.Document.add_variable(query, :userId, 1)
+      iex> query.variables
+      %{userId: 1}
+
+      iex> query = GraphqlQuery.Document.add_variables(query, [userId: 2, anotherVar: "test"])
+      iex> query.variables
+      %{userId: 2, anotherVar: "test"}
+
+      iex> query = GraphqlQuery.Document.add_fragment(query, fragment)
+      iex> query.fragments
+      [%GraphqlQuery.Fragment{name: "UserFields", fragment: "fragment UserFields on User { id name }"}]
+
+      iex> query = GraphqlQuery.Document.add_fragments(query, [fragment])
+      iex> query.fragments
+      [%GraphqlQuery.Fragment{name: "UserFields", fragment: "fragment UserFields on User { id name }"}]
+
+      iex> query = GraphqlQuery.Document.set_schema(query, MyApp.Schema)
+      iex> query.schema
+      MyApp.Schema
+
+      # Convert to string will include the fragments
+      iex> to_string(query)
+      "query { user { ...UserFields } }\n\nfragment UserFields on User { id name }"
+
+      # JSON encoding (works with Jason and JSON libraries)
+      iex> Jason.encode!(query)
+      "{\"query\":\"query { user { ...UserFields } }\n\nfragment UserFields on User { id name }\",\"variables\":{\"userId\":2,\"anotherVar\":\"test\"}}"
+
+
   """
   alias GraphqlQuery.Fragment
 
@@ -24,9 +83,9 @@ defmodule GraphqlQuery.Document do
     fragments = Keyword.get(opts, :fragments, [])
 
     # TODO: Parsing the query shall return the name of the query/fragment
-    name = signature(query)
+    name = Keyword.get(opts, :name, signature(query))
 
-    query =
+    document =
       %__MODULE__{
         name: name,
         query: query,
@@ -38,30 +97,31 @@ defmodule GraphqlQuery.Document do
       }
 
     if type == :fragment do
-      Fragment.from_query(query)
+      Fragment.from_query(document)
     else
-      query
+      document
     end
   end
 
-  defp signature(query) when is_binary(query) do
-    query |> :erlang.phash2() |> Integer.to_string()
+  defp signature(document) when is_binary(document) do
+    document |> :erlang.phash2() |> Integer.to_string()
   end
 
   defp signature(_), do: nil
 
-  def set_schema(query, schema), do: %{query | schema: schema}
+  def set_schema(document, schema), do: %{document | schema: schema}
 
-  def add_variable(query, key, value), do: update_in(query.variables, &Map.put(&1, key, value))
+  def add_variable(document, key, value),
+    do: update_in(document.variables, &Map.put(&1, key, value))
 
-  def add_variables(query, variables) when is_map(variables) do
-    update_in(query.variables, &Map.merge(&1, variables))
+  def add_variables(document, variables) when is_map(variables) do
+    update_in(document.variables, &Map.merge(&1, variables))
   end
 
-  def add_variables(query, [{k, _v} | _] = variables) when is_atom(k) do
+  def add_variables(document, [{k, _v} | _] = variables) when is_atom(k) do
     variables = keyword_to_map(variables)
 
-    add_variables(query, variables)
+    add_variables(document, variables)
   end
 
   defp keyword_to_map([{k, _v} | _] = variables) when is_atom(k) do
@@ -70,15 +130,23 @@ defmodule GraphqlQuery.Document do
 
   defp keyword_to_map(variables), do: variables
 
-  def add_fragment(query, %Fragment{} = fragment) do
-    fragments = [fragment | query.fragments]
-    %{query | fragments: unique_fragments(fragments)}
+  def add_fragment(%__MODULE__{} = document, %Fragment{} = fragment) do
+    fragments = [fragment | document.fragments]
+    %{document | fragments: unique_fragments(fragments)}
   end
 
-  def add_fragments(query, [%Fragment{} | _] = fragments) do
-    fragments = query.fragments ++ fragments
-    %{query | fragments: fragments |> only_fragments() |> unique_fragments()}
+  def add_fragment(document, _), do: document
+
+  def add_fragments(%__MODULE__{} = document, []) do
+    %{document | fragments: []}
   end
+
+  def add_fragments(%__MODULE__{} = document, [%Fragment{} | _] = fragments) do
+    fragments = document.fragments ++ fragments
+    %{document | fragments: fragments |> only_fragments() |> unique_fragments()}
+  end
+
+  def add_fragments(document, _), do: document
 
   def only_fragments(fragments) do
     Enum.filter(fragments, fn
@@ -146,8 +214,8 @@ defmodule GraphqlQuery.Document do
 
   # protocols implementation
   defimpl String.Chars do
-    def to_string(%GraphqlQuery.Document{} = gql_query) do
-      GraphqlQuery.Document.format_query_with_fragments(gql_query)
+    def to_string(%GraphqlQuery.Document{} = gql_document) do
+      GraphqlQuery.Document.format_query_with_fragments(gql_document)
     end
   end
 
@@ -167,6 +235,8 @@ defmodule GraphqlQuery.Document do
         name,
         ", query: ",
         Inspect.BitString.inspect(gql_query.query, opts),
+        ", schema: ",
+        Inspect.Atom.inspect(gql_query.schema, opts),
         ", variables: ",
         Inspect.Map.inspect(gql_query.variables, opts),
         ", fragments: ",
