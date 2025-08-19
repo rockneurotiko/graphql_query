@@ -23,6 +23,11 @@ defmodule GraphqlQuery.MacroOptions do
                    type: {:or, [:boolean, nil]},
                    default: nil,
                    doc: "Use runtime evaluation for the GraphQL query"
+                 ],
+                 fragments: [
+                   type: {:list, :any},
+                   default: [],
+                   doc: "List of fragments to include in the query"
                  ]
 
   @moduledoc """
@@ -31,7 +36,7 @@ defmodule GraphqlQuery.MacroOptions do
 
   • :ignore (boolean()) - Ignore validation errors The default value is false.
 
-  • :type (:query | :schema) - Type of the GraphQL document, either :query or
+  • :type (:query | :schema | :fragment) - Type of the GraphQL document, either :query or
     :schema The default value is :query.
 
   • :schema (module()) - Module that provides the GraphQL schema The default value is
@@ -48,10 +53,11 @@ defmodule GraphqlQuery.MacroOptions do
 
   @type t :: %__MODULE__{
           ignore: boolean() | nil,
-          type: :query | :schema,
+          type: :query | :schema | :fragment,
           schema: module() | nil,
           evaluate: boolean() | nil,
-          runtime: boolean() | nil
+          runtime: boolean() | nil,
+          fragments: list(GraphqlQuery.Fragment.t())
         }
 
   @spec docs() :: String.t()
@@ -70,7 +76,7 @@ defmodule GraphqlQuery.MacroOptions do
     end
   end
 
-  @spec validate!(Keyword.t()) :: Keyword.t() | no_return()
+  @spec validate!(Keyword.t()) :: __MODULE__.t() | no_return()
   def validate!(opts) do
     case validate(opts) do
       {:ok, validated_opts} -> validated_opts

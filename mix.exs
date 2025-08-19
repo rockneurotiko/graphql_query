@@ -35,7 +35,11 @@ defmodule GraphqlQuery.MixProject do
       {:rustler_precompiled, "~> 0.8"},
       {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)},
       {:nimble_options, "~> 1.1"},
+      {:jason, "~> 1.4", optional: true},
 
+      # Development
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       # Release deps
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]

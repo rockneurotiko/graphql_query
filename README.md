@@ -409,9 +409,10 @@ GraphqlQuery.Format.format("query GetUser($id: ID!){user(id:$id){name email}}")
 
 ### Planned
 
+- [ ] Extract query/mutation and fragment names
+- [ ] Fix line reporting on expanded queries
 - [ ] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
 - [ ] Optional compile-time validation via Mix task
-- [ ] Think on fragments and if we need specific support for named fragments
 
 ### Done
 
@@ -420,6 +421,8 @@ GraphqlQuery.Format.format("query GetUser($id: ID!){user(id:$id){name email}}")
 - [x] `gql` macro for dynamic queries
 - [x] `gql_from_file` macro for file-based queries
 - [x] Schema parsing and validation
+- [x] Custom Document and Fragment representation, with implementation for to_string and json with JSON and Jason
+- [x] Allow to set fragments in individual queries or per-module
 
 ---
 

@@ -4,6 +4,8 @@ use apollo_compiler::validation::Valid;
 use apollo_compiler::ExecutableDocument;
 use apollo_compiler::Schema;
 
+use regex::Regex;
+
 #[derive(Debug, Clone, rustler::NifStruct)]
 #[module = "GraphqlQuery.ValidationError"]
 pub struct ValidationError {
@@ -101,6 +103,40 @@ fn validate_query(
 #[rustler::nif]
 fn validate_schema(schema: String, path: String) -> Result<rustler::Atom, Vec<ValidationError>> {
     parse_schema(&schema, &path).map(|_| atoms::ok())
+}
+
+#[rustler::nif]
+fn validate_fragment(
+    fragment: String,
+    path: String,
+    schema: Option<String>,
+    schema_path: Option<String>,
+) -> Result<rustler::Atom, Vec<ValidationError>> {
+    let result = match schema {
+        Some(schema) => {
+            let schema_path = schema_path.unwrap_or_else(|| "schema.graphql".to_string());
+            validate_query_with_schema(schema, schema_path, fragment, path)
+        }
+        None => validate_query_without_schema(fragment, path),
+    };
+
+    let unused_fragment_regex = Regex::new(r"fragment `.*` must be used in an operation").unwrap();
+
+    match result {
+        Ok(atom) => Ok(atom),
+        Err(errors) => {
+            let filtered_errors = errors
+                .into_iter()
+                .filter(|e| !unused_fragment_regex.is_match(&e.message))
+                .collect::<Vec<ValidationError>>();
+
+            if filtered_errors.is_empty() {
+                Ok(atoms::ok())
+            } else {
+                Err(filtered_errors)
+            }
+        }
+    }
 }
 
 #[rustler::nif]

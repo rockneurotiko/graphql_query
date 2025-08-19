@@ -25,6 +25,8 @@ defmodule GraphqlQuery.Schema do
   @callback schema() :: String.t()
   @callback schema_path() :: String.t()
 
+  defstruct [:schema, :schema_path]
+
   defmacro __using__(opts) do
     file_path = Keyword.get(opts, :schema_path)
 

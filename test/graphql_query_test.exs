@@ -3,6 +3,8 @@ defmodule GraphqlQueryTest do
   import GraphqlQuery
   doctest GraphqlQuery
 
+  alias GraphqlQuery.Document
+
   describe "~GQL sigil" do
     test "returns the same query string when valid" do
       original_query = """
@@ -19,7 +21,7 @@ defmodule GraphqlQueryTest do
       }
       """
 
-      sigil_query = ~GQL"""
+      sigil_document = ~GQL"""
       query GetUser($id: ID!) {
         user(id: $id) {
           id
@@ -32,6 +34,8 @@ defmodule GraphqlQueryTest do
         }
       }
       """
+
+      assert %Document{query: sigil_query, type: :query} = sigil_document
 
       assert sigil_query == original_query
     end
@@ -46,7 +50,7 @@ defmodule GraphqlQueryTest do
       }
       """
 
-      sigil_query = ~GQL"""
+      sigil_document = ~GQL"""
       {
         user {
           id
@@ -55,6 +59,7 @@ defmodule GraphqlQueryTest do
       }
       """
 
+      assert %Document{query: sigil_query, type: :query} = sigil_document
       assert sigil_query == query
     end
   end
@@ -89,7 +94,8 @@ defmodule GraphqlQueryTest do
       logs =
         ExUnit.CaptureIO.capture_io(:stderr, fn ->
           [{compiled_module, _}] = Code.compile_string(data)
-          assert compiled_module.query() == expected
+          assert %Document{query: result, type: :query} = compiled_module.query()
+          assert result == expected
         end)
 
       assert logs =~ "warning"
@@ -133,12 +139,12 @@ defmodule GraphqlQueryTest do
         end
       end
 
-      result = TestGqlAttributes.query_with_attributes()
+      assert %Document{query: result, type: :query} = TestGqlAttributes.query_with_attributes()
       assert result =~ "query GetUser($id: ID!)"
       assert result =~ "id name email"
     end
 
-    test "works with other GQL results in module attributes" do
+    test "works with other GQL results in module attributes if evaluate" do
       defmodule TestGqlWithFragments do
         import GraphqlQuery
 
@@ -147,10 +153,11 @@ defmodule GraphqlQueryTest do
           name
           email
         }
-        """i
+        """f
 
         def query_with_fragment do
-          gql """
+          # Need evaluation to expand fragments
+          gql [evaluate: true], """
           query {
             user {
               ...UserFields
@@ -161,10 +168,45 @@ defmodule GraphqlQueryTest do
         end
       end
 
-      result = TestGqlWithFragments.query_with_fragment()
+      assert %Document{query: result, type: :query} = TestGqlWithFragments.query_with_fragment()
       assert result =~ "query {"
       assert result =~ "...UserFields"
       assert result =~ "fragment UserFields on User"
+    end
+
+    test "no need to evaluate if fragments are explicitly used" do
+      defmodule TestGqlWithFragmentsOptions do
+        import GraphqlQuery
+
+        @user_fragment ~GQL"""
+        fragment UserFields on User {
+          name
+          email
+        }
+        """f
+
+        def query_with_fragment do
+          # Need evaluation to expand fragments
+          gql [fragments: [@user_fragment]], """
+          query {
+            user {
+              ...UserFields
+            }
+          }
+          """
+        end
+      end
+
+      document = TestGqlWithFragmentsOptions.query_with_fragment()
+      assert %Document{query: result, type: :query} = document
+
+      assert result =~ "query {"
+      assert result =~ "...UserFields"
+      # In normal query the fragment is not expanded
+      refute result =~ "fragment UserFields on User"
+
+      # But when transformed to string, it should include the fragment definition
+      assert to_string(document) =~ "fragment UserFields on User"
     end
 
     test "works with evaluate option and module calls" do
@@ -180,7 +222,7 @@ defmodule GraphqlQueryTest do
               id
               email
             }
-            """i
+            """f
           end
 
           def more_fields, do: ["name", "surname"] |> Enum.join("\n")
@@ -198,7 +240,7 @@ defmodule GraphqlQueryTest do
         end
       end
 
-      result = TestGqlEvaluate.query_with_evaluate()
+      assert %Document{query: result, type: :query} = TestGqlEvaluate.query_with_evaluate()
       assert result =~ "...UserIdentifier"
       assert result =~ "name\nsurname"
       assert result =~ "fragment UserIdentifier on User"
@@ -224,7 +266,7 @@ defmodule GraphqlQueryTest do
       end
 
       # This should compile without issues and work at runtime
-      result = TestGqlLocalVars.query_with_local_vars()
+      assert %Document{query: result, type: :query} = TestGqlLocalVars.query_with_local_vars()
       assert result =~ "query GetUser($id: ID!)"
       assert result =~ "id\nname\nemail"
     end
@@ -282,7 +324,9 @@ defmodule GraphqlQueryTest do
       end
 
       # The query should work and return the interpolated string
-      result = TestGqlRuntime.query_with_runtime_validation("$id")
+      assert %Document{query: result, type: :query} =
+               TestGqlRuntime.query_with_runtime_validation("$id")
+
       assert result =~ "query GetUser($id: ID!)"
       assert result =~ "user(id: $id)"
       assert result =~ "id\nname\nemail"
@@ -306,7 +350,7 @@ defmodule GraphqlQueryTest do
       end
 
       # Should work without any warnings or validation
-      result = TestGqlIgnore.query_with_ignore_option()
+      assert %Document{query: result, type: :query} = TestGqlIgnore.query_with_ignore_option()
       assert result =~ "query {"
       assert result =~ "id\nname"
     end
@@ -355,7 +399,9 @@ defmodule GraphqlQueryTest do
         end
       end
 
-      result = TestGqlModuleOptions.query_with_module_options()
+      assert %Document{query: result, type: :query} =
+               TestGqlModuleOptions.query_with_module_options()
+
       assert result =~ "query {"
       assert result =~ "id name"
     end
