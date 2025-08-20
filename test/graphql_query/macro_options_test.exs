@@ -30,11 +30,11 @@ defmodule GraphqlQuery.MacroOptionsTest do
 
       assert {:ok, validated} = MacroOptions.validate(opts)
       assert %MacroOptions{} = validated
-      assert validated.ignore == nil
+      assert validated.ignore == false
       assert validated.type == :query
       assert validated.schema == :not_set
-      assert validated.evaluate == nil
-      assert validated.runtime == nil
+      assert validated.evaluate == false
+      assert validated.runtime == false
       assert validated.fragments == []
     end
 
@@ -46,8 +46,8 @@ defmodule GraphqlQuery.MacroOptionsTest do
       assert validated.ignore == false
       assert validated.type == :fragment
       assert validated.schema == :not_set
-      assert validated.evaluate == nil
-      assert validated.runtime == nil
+      assert validated.evaluate == false
+      assert validated.runtime == false
       assert validated.fragments == []
     end
 
@@ -88,7 +88,7 @@ defmodule GraphqlQuery.MacroOptionsTest do
       opts = [ignore: "invalid"]
 
       assert {:error, %NimbleOptions.ValidationError{} = error} = MacroOptions.validate(opts)
-      assert error.message =~ "expected :ignore option to match"
+      assert error.message =~ "expected boolean"
       assert error.key == :ignore
     end
 
@@ -96,7 +96,7 @@ defmodule GraphqlQuery.MacroOptionsTest do
       opts = [evaluate: "invalid"]
 
       assert {:error, %NimbleOptions.ValidationError{} = error} = MacroOptions.validate(opts)
-      assert error.message =~ "expected :evaluate option to match"
+      assert error.message =~ "expected boolean"
       assert error.key == :evaluate
     end
 
@@ -104,7 +104,7 @@ defmodule GraphqlQuery.MacroOptionsTest do
       opts = [runtime: "invalid"]
 
       assert {:error, %NimbleOptions.ValidationError{} = error} = MacroOptions.validate(opts)
-      assert error.message =~ "expected :runtime option to match"
+      assert error.message =~ "expected boolean"
       assert error.key == :runtime
     end
 
@@ -116,13 +116,12 @@ defmodule GraphqlQuery.MacroOptionsTest do
       assert error.key == :fragments
     end
 
-    test "validates nil values for boolean options" do
+    test "returns error for nil values in boolean options" do
       opts = [ignore: nil, evaluate: nil, runtime: nil]
 
-      assert {:ok, validated} = MacroOptions.validate(opts)
-      assert validated.ignore == nil
-      assert validated.evaluate == nil
-      assert validated.runtime == nil
+      assert {:error, %NimbleOptions.ValidationError{} = error} = MacroOptions.validate(opts)
+      assert error.message =~ "expected boolean"
+      assert error.key == :ignore
     end
 
     test "validates all valid type values" do
@@ -164,7 +163,7 @@ defmodule GraphqlQuery.MacroOptionsTest do
       validated = MacroOptions.validate!([])
       assert %MacroOptions{} = validated
       assert validated.type == :query
-      assert validated.ignore == nil
+      assert validated.ignore == false
     end
   end
 

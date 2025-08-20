@@ -59,10 +59,32 @@ jobs:
       - name: Compile deps
         run: mix deps.compile
 
+      - name: Check format
+        run: mix format --check-formatted
+
+      - name: Run Credo
+        run: mix credo
+
+      - name: Restore dialyzer cache
+        uses: actions/cache/restore@v4
+        with:
+          path: priv/plts
+          key: plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-
+
+      - name: Run dialyzer
+        run: mix dialyzer --format github
+
+      - name: Save dialyzer cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: priv/plts
+          key: plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-${{ hashFiles('mix.lock') }}
+
       - name: Run tests
         run: mix test --warnings-as-errors
 
       - name: Compile once again but without optional deps
         run: mix compile --force --warnings-as-errors --no-optional-deps
-
-      - run: mix format --check-formatted

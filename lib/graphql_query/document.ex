@@ -87,6 +87,7 @@ defmodule GraphqlQuery.Document do
     schema = Keyword.get(opts, :schema, nil)
     fragments = Keyword.get(opts, :fragments, [])
 
+    # credo:disable-for-next-line
     # TODO: Parsing the query shall return the name of the query/fragment
     name = Keyword.get(opts, :name, signature(query))
 
@@ -169,6 +170,7 @@ defmodule GraphqlQuery.Document do
         true
 
       _ ->
+        # credo:disable-for-next-line
         # TODO: Log warning?
         false
     end)

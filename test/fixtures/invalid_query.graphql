@@ -1,0 +1,6 @@
+query InvalidQuery($unused: String) {
+  user {
+    id
+    name
+  }
+}

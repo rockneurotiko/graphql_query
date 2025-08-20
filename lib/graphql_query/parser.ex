@@ -70,18 +70,19 @@ defmodule GraphqlQuery.Parser do
 
     location = Keyword.merge(warn_location, new_location)
 
-    error_prefix = error_prefix(prefix, location)
+    file_path = warn_location[:file] || "unknown"
+    error_prefix = error_prefix(prefix, location, file_path)
 
     msg = "[GraphqlQuery] #{error_prefix} #{error.message}"
 
     %{message: msg, location: location}
   end
 
-  defp error_prefix(prefix, _location) when is_binary(prefix) do
+  defp error_prefix(prefix, _loc, _file_path) when is_binary(prefix) do
     prefix
   end
 
-  defp error_prefix(prefix, location) when is_function(prefix, 1) do
-    prefix.(location)
+  defp error_prefix(:runtime, loc, file_path) do
+    "Runtime Validation error @ #{file_path}:#{loc[:line]}:#{loc[:column]} ->"
   end
 end

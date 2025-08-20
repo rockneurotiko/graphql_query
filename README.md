@@ -23,6 +23,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
   - [~GQL Sigil](#gql-sigil)
   - [gql_from_file Macro](#gql_from_file-macro)
   - [gql Macro](#gql-macro)
+  - [document_with_options Macro](#document_with_options-macro)
 - [Use the documents in HTTP Requests](#use-the-documents-in-http-requests)
 - [Fragment support](#fragment-support)
   - [Define fragments](#define-fragments)
@@ -58,6 +59,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
   - `~GQL` sigil for static queries
   - `gql_from_file` for file-based queries
   - `gql` macro for dynamic queries
+  - `document_with_options` for applying options to multiple macros
 - ✅ **Query formatting** with consistent indentation
 - ✅ **Mix format integration** for `~GQL` sigil, `.graphql` and `.gql` files
 - ✅ **Schema modules** with automatic recompilation on schema changes
@@ -314,6 +316,61 @@ defmodule Example do
       user(id: #{user_id}) { name }
     }
     """
+  end
+end
+```
+
+---
+
+### `document_with_options` Macro
+
+- Apply **common options** to all GraphqlQuery macros and sigils within a block
+- **Key feature**: Enables the `~GQL` sigil to work with complex options like `:schema` and `:fragments`
+- Supports all the same options as individual macros
+- Options are merged with precedence ((explicit macro options | sigil modifiers) > `document_with_options` > module defaults)
+
+The main use case for the macro `document_with_options` is to  **use fragments and schema validation with sigils**.
+The `~GQL` sigil doesn't support schema or fragments options directly, but `document_with_options` enables it:
+
+```elixir
+# This won't work - sigils don't support schema options
+~GQL"""
+query GetUser { user { id name } }
+"""[schema: MySchema]  # ❌ Invalid syntax
+
+# This works perfectly
+document_with_options schema: MySchema do
+  ~GQL"""
+  query GetUser { user { ...UserFragment } }
+  """  # ✅ Schema validation applied
+end
+```
+
+```elixir
+defmodule MyApp.Schema do
+  use GraphqlQuery.Schema, schema_path: "priv/schema.graphql"
+end
+
+defmodule MyApp.Queries do
+  use GraphqlQuery, schema: MyApp.Schema
+
+  @user_fragment ~GQL"""
+  fragment UserFragment on User {
+    id
+    name
+  }
+  """f
+
+  def user_query do
+    document_with_options fragments: [@user_fragment] do
+      ~GQL"""
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          ...UserFragment
+        }
+      }
+      """
+    end
   end
 end
 ```
