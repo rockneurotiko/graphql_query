@@ -170,7 +170,7 @@ defmodule GraphqlQuery.ValidatorTest do
   describe "validate/1 with schema validation" do
     # Note: These tests would require actual schema modules to be meaningful
     # For now, we test the interface when schema is nil
-    
+
     test "validates Document with nil schema (no schema validation)" do
       query = "query TestQuery { user { id name } }"
       document = Document.new(query, schema: nil)

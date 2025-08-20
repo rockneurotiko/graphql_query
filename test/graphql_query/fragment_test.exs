@@ -60,10 +60,12 @@ defmodule GraphqlQuery.FragmentTest do
 
     test "preserves Document metadata in Fragment" do
       query = "fragment UserProfile on User { id name avatar }"
-      document = Document.new(query, 
-        path: "/graphql/fragments/user.gql",
-        schema: UserSchema
-      )
+
+      document =
+        Document.new(query,
+          path: "/graphql/fragments/user.gql",
+          schema: UserSchema
+        )
 
       fragment = Fragment.from_query(document)
 
@@ -101,6 +103,7 @@ defmodule GraphqlQuery.FragmentTest do
 
     test "handles fragment without extra whitespace" do
       fragment_content = "fragment PostFields on Post { title content }"
+
       fragment = %Fragment{
         name: "PostFields",
         fragment: fragment_content,
@@ -115,7 +118,7 @@ defmodule GraphqlQuery.FragmentTest do
 
     test "trims multiline fragment content" do
       fragment_content = """
-      
+
       fragment UserDetails on User {
         id
         name
@@ -125,7 +128,7 @@ defmodule GraphqlQuery.FragmentTest do
           avatar
         }
       }
-      
+
       """
 
       fragment = %Fragment{
@@ -179,12 +182,13 @@ defmodule GraphqlQuery.FragmentTest do
 
     test "Document.new with type: :fragment preserves options" do
       fragment_query = "fragment UserProfile on User { id name avatar }"
-      
-      result = Document.new(fragment_query, 
-        type: :fragment,
-        path: "/fragments/user.gql",
-        schema: MySchema
-      )
+
+      result =
+        Document.new(fragment_query,
+          type: :fragment,
+          path: "/fragments/user.gql",
+          schema: MySchema
+        )
 
       assert %Fragment{
                fragment: ^fragment_query,
@@ -210,7 +214,9 @@ defmodule GraphqlQuery.FragmentTest do
       document = Document.new(query)
 
       user_fragment = Document.new("fragment UserFields on User { id name }", type: :fragment)
-      post_fragment = Document.new("fragment PostFields on Post { title content }", type: :fragment)
+
+      post_fragment =
+        Document.new("fragment PostFields on Post { title content }", type: :fragment)
 
       updated_document = Document.add_fragments(document, [user_fragment, post_fragment])
 
@@ -250,7 +256,7 @@ defmodule GraphqlQuery.FragmentTest do
       # Create a Document that already has fragments
       main_query = "query { user { ...UserFields } }"
       document = Document.new(main_query)
-      
+
       existing_fragment = Document.new("fragment UserFields on User { id }", type: :fragment)
       document_with_fragments = Document.add_fragment(document, existing_fragment)
 
@@ -267,7 +273,7 @@ defmodule GraphqlQuery.FragmentTest do
       long_fragment_name = String.duplicate("VeryLong", 50)
       long_fields = String.duplicate("id name email ", 100)
       long_fragment = "fragment #{long_fragment_name} on User { #{long_fields} }"
-      
+
       result = Document.new(long_fragment, type: :fragment)
 
       assert %Fragment{} = result
