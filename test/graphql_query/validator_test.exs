@@ -3,7 +3,7 @@ defmodule GraphqlQuery.ValidatorTest do
 
   doctest GraphqlQuery.Validator
 
-  alias GraphqlQuery.{Validator, Document}
+  alias GraphqlQuery.{Document, Validator}
 
   describe "validate/1" do
     test "uses default document name on errors" do

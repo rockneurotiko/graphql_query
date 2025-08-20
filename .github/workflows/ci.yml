@@ -63,7 +63,7 @@ jobs:
         run: mix format --check-formatted
 
       - name: Run Credo
-        run: mix credo -a
+        run: mix credo
 
       - name: Restore dialyzer cache
         uses: actions/cache/restore@v4

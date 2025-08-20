@@ -3,7 +3,7 @@ defmodule GraphqlQuery.FragmentTest do
 
   doctest GraphqlQuery.Fragment
 
-  alias GraphqlQuery.{Fragment, Document}
+  alias GraphqlQuery.{Document, Fragment}
 
   describe "Fragment struct" do
     test "has correct struct fields" do

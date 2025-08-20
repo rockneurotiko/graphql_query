@@ -111,7 +111,15 @@ defmodule GraphqlQuery.MixProject do
       "rust.lint": [
         "cmd cargo clippy --manifest-path=native/graphql_query_native/Cargo.toml -- -Dwarnings"
       ],
-      "rust.fmt": ["cmd cargo fmt --manifest-path=native/graphql_query_native/Cargo.toml --all"]
+      "rust.fmt": ["cmd cargo fmt --manifest-path=native/graphql_query_native/Cargo.toml --all"],
+      ci: [
+        "compile --warnings-as-errors",
+        "cmd mix test --warnings-as-errors",
+        "credo",
+        "dialyzer",
+        "rust.lint",
+        "rust.fmt"
+      ]
     ]
   end
 end
