@@ -69,9 +69,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: priv/plts
-          key: plts-v1-${{ matrix.erlang }}-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+          key: plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            plts-v1-${{ matrix.erlang }}-${{ matrix.elixir }}-
+            plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-
 
       - name: Run dialyzer
         run: mix dialyzer --format github
@@ -81,7 +81,7 @@ jobs:
         if: always()
         with:
           path: priv/plts
-          key: plts-v1-${{ matrix.erlang }}-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+          key: plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-${{ hashFiles('mix.lock') }}
 
       - name: Run tests
         run: mix test --warnings-as-errors
