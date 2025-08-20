@@ -7,7 +7,7 @@ releasing is a bit more involved than it would be otherwise.
 1. Pick the new release `version`.
 
     * We follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-    * Should be the current version in `mix.exs` with `-dev` removed.
+    * Should be the current version in `VERSION` with `-dev` removed if no major changes happened.
 
 1. Begin drafting a new release.
 
