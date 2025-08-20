@@ -21,8 +21,9 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
   - [Examples](#examples)
 - [Usage](#usage)
   - [~GQL Sigil](#gql-sigil)
-  - [gql Macro](#gql-macro)
   - [gql_from_file Macro](#gql_from_file-macro)
+  - [gql Macro](#gql-macro)
+- [Use the documents in HTTP Requests](#use-the-documents-in-http-requests)
 - [Fragment support](#fragment-support)
   - [Define fragments](#define-fragments)
   - [Use fragments](#use-fragments)
@@ -30,7 +31,6 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
   - [Parsing and Validating Schemas](#parsing-and-validating-schemas)
   - [Schema Modules](#schema-modules)
   - [Document Validation Against Schema](#document-validation-against-schema)
-- [Use the documents in HTTP Requests](#use-the-documents-in-http-requests)
 - [Formatter Integration](#formatter-integration)
 - [Manual API](#manual-api)
 - [Roadmap](#roadmap)
@@ -44,13 +44,13 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 - **Developer tool**: Focused on **validation, formatting, compile-time and runtime safety**.
 - **External APIs integration**: Build and validate queries against external GraphQL APIs. Never miss a deprecated field, a type error in the arguments or a typo in the fields you are fetching.
 - **Best match for your tests**: Use in your tests to build and validate queries against any GraphQL schema (external APIs, you own Absinthe schema, ...), catch issues early on development.
-- **Not a GraphQL server**: Unlike [Absinthe](https://hex.pm/packages/absinthe), this library does not execute queries.
+- **Not a GraphQL server**: [Absinthe](https://hex.pm/packages/absinthe) is for building GraphQL servers. `GraphqlQuery` is for validating and formatting queries against schemas (including external APIs). They complement each other.
 
 ---
 
 ## Features
 
-- ✅ **GraphQL query validation** (syntax, unused vars, fragments, spec compliance)
+- ✅ **GraphQL queries and mutations validation** (syntax, unused vars, fragments, spec compliance)
 - ✅ **Schema parsing and validation** (from strings or files)
 - ✅ **Fragment support** with composition, reusability, and validation
 - ✅ **Schema-aware query, mutation and fragments validation** (detect invalid fields/types)
@@ -91,7 +91,7 @@ No Rust installation required — precompiled binaries are used.
 
 ### Examples
 
-#### Example: Compile-time Query Validation
+#### Example: Compile-time Document Validation
 
 ```elixir
 import GraphqlQuery
@@ -320,6 +320,56 @@ end
 
 ---
 
+## Use the documents in HTTP requests
+
+At the end, we want to build GraphQL queries to do requests to the GraphQL server.
+
+To make it easy, the GraphQL.Document struct returned by `~GQL`, `gql_from_file` and `gql` implement the protocol for the standard library [`JSON`](https://hexdocs.pm/elixir/JSON.html) and for [`Jason`](https://hexdocs.pm/jason/Jason.html).
+
+To use queries in requests, you can directly put the query document in the body if the library supports JSON encoding, or manually call `JSON.encode!(query)` or `Jason.encode!(query)` to get the request body as a string.
+
+The encoding build a json such as `{"query": "document", "variables": {}}`. The document is the query or mutation with the fragments (if any) at the end.
+
+Example with [`Req`](https://github.com/wojtekmach/req) and [`GraphQLZero` mock server](https://graphqlzero.almansi.me):
+
+```elixir
+base_query = ~GQL"""
+query($id: ID!) {
+  user(id: $id) {
+    id
+    username
+    email
+    address {
+      geo {
+        lat
+        lng
+      }
+    }
+  }
+}
+"""
+# base_query is a %GraphqlQuery.Document{} struct
+
+# We add variables to create a new document with that information
+user_query = GraphqlQuery.Document.add_variable(base_query, :id, "1")
+
+Req.post!("https://graphqlzero.almansi.me/api", json: user_query).body
+
+# %{
+#   "data" => %{
+#     "user" => %{
+#       "address" => %{"geo" => %{"lat" => -37.3159, "lng" => 81.1496}},
+#       "email" => "Sincere@april.biz",
+#       "id" => "1",
+#       "username" => "Bret"
+#     }
+#   }
+# }
+
+```
+
+---
+
 ## Fragment support
 
 You can define your fragments and use them with the macros.
@@ -489,56 +539,6 @@ end
 
 ---
 
-## Use the documents in HTTP requests
-
-At the end, we want to build GraphQL queries to do requests to the GraphQL server.
-
-To make it easier, the GraphQL.Document implements the protocol for the standard library [`JSON`](https://hexdocs.pm/elixir/JSON.html) and
-for [`Jason`](https://hexdocs.pm/jason/Jason.html).
-
-So, to use your queries in your requests, you can directly set the body as the document if the library support json encoding, or manually call `JSON.encode!(query)` or `Jason.encode!(query)` to get the request body.
-
-The encoding build a json such as `{"query": "document", "variables": {}}`. The document is the query or mutation with the fragments (if any) at the end.
-
-Example with [`Req`](https://github.com/wojtekmach/req) and [`GraphQLZero` mock server](https://graphqlzero.almansi.me):
-
-```elixir
-base_query = ~GQL"""
-query($id: ID!) {
-  user(id: $id) {
-    id
-    username
-    email
-    address {
-      geo {
-        lat
-        lng
-      }
-    }
-  }
-}
-"""
-# #GraphqlQuery.Document{...}
-
-user_query = GraphqlQuery.Document.add_variable(base_query, :id, "1")
-
-Req.post!("https://graphqlzero.almansi.me/api", json: user_query).body
-
-# %{
-#   "data" => %{
-#     "user" => %{
-#       "address" => %{"geo" => %{"lat" => -37.3159, "lng" => 81.1496}},
-#       "email" => "Sincere@april.biz",
-#       "id" => "1",
-#       "username" => "Bret"
-#     }
-#   }
-# }
-
-```
-
----
-
 ## Formatter Integration
 
 Add to `.formatter.exs`:
@@ -561,7 +561,7 @@ Now `mix format` will:
 
 You shouldn't need to use the manual API, but if you need to, you can do everything yourself.
 
-Check the this modules documentation if you want to know more about the manual API:
+Check the documentation of these modules if you want to know more about the manual API:
 - [GraphqlQuery.Document](https://hexdocs.pm/graphql_query/GraphqlQuery.Document.html)
 - [GraphqlQuery.Fragment](https://hexdocs.pm/graphql_query/GraphqlQuery.Fragment.html)
 - [GraphqlQuery.Validator](https://hexdocs.pm/graphql_query/GraphqlQuery.Validator.html)
@@ -593,7 +593,7 @@ Check the this modules documentation if you want to know more about the manual A
 
 
 ## License
-Beerware 🍺 — do whatever you want with it, but if we meet, buy me a beer.
+Beerware 🍺 — do whatever you want with it, but if we meet, buy me a beer. (This is essentially MIT-like. Use it freely, but if we meet, buy me a beer)
 
 <!-- MDOC -->
 
