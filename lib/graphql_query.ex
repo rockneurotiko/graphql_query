@@ -62,6 +62,52 @@ defmodule GraphqlQuery do
     |> Enum.flat_map(fn {_, behaviours} -> behaviours end)
   end
 
+  defmacro document_with_options(opts, do: block) do
+    GraphqlQuery.MacroOptions.validate!(opts)
+
+    modified_block = Macro.prewalk(block, fn ast -> add_extra_opts_to_ast(ast, opts) end)
+
+    quote do
+      unquote(modified_block)
+    end
+  end
+
+  # This is used like:
+  # document_with_options ~GQL"", ignore: true
+  # But I don't really like this syntax, let's keep it commented out for now
+  # defmacro document_with_options(ast, opts) do
+  #   GraphqlQuery.MacroOptions.validate!(opts)
+  #   ast = add_extra_opts_to_ast(ast, opts)
+
+  #   quote do
+  #     unquote(ast)
+  #   end
+  # end
+
+  defp add_extra_opts_to_ast(ast, opts) do
+    case ast do
+      {:sigil_GQL, meta, params} ->
+        {:sigil_GQL, meta, params ++ [opts]}
+
+      {:gql, meta, [data]} ->
+        {:gql, meta, [opts, data]}
+
+      {:gql, meta, [current_opts, data]} ->
+        new_opts = Keyword.merge(opts, current_opts)
+        {:gql, meta, [new_opts, data]}
+
+      {:gql_from_file, meta, [data]} ->
+        {:gql_from_file, meta, [data, opts]}
+
+      {:gql_from_file, meta, [data, current_opts]} ->
+        new_opts = Keyword.merge(opts, current_opts)
+        {:gql_from_file, meta, [data, new_opts]}
+
+      other ->
+        other
+    end
+  end
+
   @doc """
   Loads and validates GraphQL queries from external files.
 
@@ -93,33 +139,38 @@ defmodule GraphqlQuery do
     Module.put_attribute(__CALLER__.module, :external_resource, file_path)
     caller = __CALLER__
 
-    opts = GraphqlQuery.MacroOptions.validate!(opts)
+    GraphqlQuery.MacroOptions.validate!(opts)
 
     ignore? = get_option(opts, :ignore, false, caller)
-    type = opts.type
+    runtime_validation? = get_option(opts, :runtime, false, caller)
+    type = get_option(opts, :type, :query, caller)
     schema_module = get_schema_module(opts, caller)
     fragments = get_option(opts, :fragments, [], caller)
 
     contents = File.read!(file_path)
 
-    location_info = [file: file_path]
+    warn_location = [file: file_path]
 
-    query =
-      Document.new(contents,
-        path: file_path,
-        type: type,
-        schema: schema_module,
-        fragments: fragments
-      )
+    query_opts = [path: file_path, type: type, schema: schema_module, fragments: fragments]
 
-    if not ignore? do
-      fragments_evaluated = Enum.map(fragments, fn f -> expand_fragment!(f, caller) end)
-      query = Document.add_fragments(query, fragments_evaluated)
+    query = Document.new(contents, query_opts)
 
-      do_validate(query, location_info)
+    cond do
+      ignore? ->
+        Macro.escape(query)
+
+      runtime_validation? ->
+        # Validate on runtime
+        validate_on_runtime(contents, query_opts, warn_location)
+
+      true ->
+        fragments_evaluated = Enum.map(fragments, fn f -> expand_fragment!(f, caller) end)
+        query = Document.add_fragments(query, fragments_evaluated)
+
+        do_validate(query, warn_location)
+
+        Macro.escape(query)
     end
-
-    Macro.escape(query)
   end
 
   @doc """
@@ -162,14 +213,14 @@ defmodule GraphqlQuery do
     file = caller.file
     warn_location = warn_location([], caller)
 
-    opts = GraphqlQuery.MacroOptions.validate!(opts)
+    GraphqlQuery.MacroOptions.validate!(opts)
 
     ignore? = get_option(opts, :ignore, false, caller)
     runtime_validation? = get_option(opts, :runtime, false, caller)
     schema_module = get_schema_module(opts, caller)
     fragments = get_option(opts, :fragments, [], caller)
 
-    type = opts.type
+    type = get_option(opts, :type, :query, caller)
 
     query = Document.new(content, path: file, type: type, schema: schema_module)
 
@@ -222,7 +273,7 @@ defmodule GraphqlQuery do
   defp do_gql(original, parts, caller, meta, opts) do
     file = caller.file
 
-    opts = GraphqlQuery.MacroOptions.validate!(opts)
+    GraphqlQuery.MacroOptions.validate!(opts)
 
     warn_location = warn_location(meta, caller, -4)
     evaluate? = get_option(opts, :evaluate, false, caller)
@@ -231,7 +282,7 @@ defmodule GraphqlQuery do
 
     schema_module = get_schema_module(opts, caller)
 
-    type = opts.type
+    type = get_option(opts, :type, :query, caller)
 
     fragments = get_option(opts, :fragments, [], caller)
 
@@ -390,7 +441,14 @@ defmodule GraphqlQuery do
         plugins: [GraphqlQuery.Formatter]
       ]
   """
-  defmacro sigil_GQL({:<<>>, meta, [query_string]}, opts) do
+  defmacro sigil_GQL(data, opts) do
+    quote do
+      sigil_GQL(unquote(data), unquote(opts), [])
+    end
+  end
+
+  # credo:disable-for-next-line
+  defmacro sigil_GQL({:<<>>, meta, [query_string]}, opts, extra_opts) do
     # Validate at compile time
     caller = __CALLER__
     file = caller.file
@@ -400,32 +458,39 @@ defmodule GraphqlQuery do
       if ?i in opts do
         true
       else
-        get_module_attribute(caller.module, :__graphql_query__ignore, false)
+        get_option(extra_opts, :ignore, false, caller)
       end
 
     runtime? =
       if ?r in opts do
         true
       else
-        get_module_attribute(caller.module, :__graphql_query__runtime, false)
+        get_option(extra_opts, :runtime, false, caller)
       end
 
     type =
       cond do
-        ?s in opts -> :schema
-        ?q in opts -> :query
-        ?f in opts -> :fragment
-        true -> get_module_attribute(caller.module, :__graphql_query__type, :query)
+        ?s in opts ->
+          :schema
+
+        ?q in opts ->
+          :query
+
+        ?f in opts ->
+          :fragment
+
+        true ->
+          get_option(extra_opts, :type, :query, caller)
       end
 
     schema_module =
-      if module = get_module_attribute(caller.module, :__graphql_query__schema, nil) do
+      if module = get_option(extra_opts, :schema, nil, caller) do
         ensure_module_loaded!(module)
       else
         nil
       end
 
-    fragments = get_module_attribute(caller.module, :__graphql_query__fragments, [])
+    fragments = get_option(extra_opts, :fragments, [], caller)
 
     query_opts = [path: file, type: type, schema: schema_module, fragments: fragments]
 
@@ -515,6 +580,7 @@ defmodule GraphqlQuery do
     end)
   end
 
+  # credo:disable-for-next-line
   defp expand_fragment!(ast, caller) do
     ast
     |> Macro.prewalker()
@@ -554,6 +620,7 @@ defmodule GraphqlQuery do
             end
 
           ast ->
+            # credo:disable-for-next-line
             case evaluate_ast(ast, caller) do
               {:ok, %GraphqlQuery.Fragment{} = fragment} ->
                 {:halt, {:ok, fragment}}
@@ -663,14 +730,7 @@ defmodule GraphqlQuery do
 
         {:error, errors} ->
           Enum.each(errors, fn error ->
-            error =
-              GraphqlQuery.Parser.format_error(
-                error,
-                unquote(warn_location),
-                fn loc ->
-                  "Runtime Validation error @ #{file_path}:#{loc[:line]}:#{loc[:column]} ->"
-                end
-              )
+            error = GraphqlQuery.Parser.format_error(error, unquote(warn_location), :runtime)
 
             Logger.warning(error.message, error.location)
           end)
@@ -788,13 +848,21 @@ defmodule GraphqlQuery do
   defp get_option(opts, key, default, caller) do
     module_attribute_key = :"__graphql_query__#{key}"
 
-    case get_in(opts, [Access.key(key)]) do
+    case Keyword.get(opts, key) do
       nil ->
         get_module_attribute(caller.module, module_attribute_key, default)
 
       value ->
         value
     end
+
+    # case get_in(opts, [Access.key(key)]) do
+    #   nil ->
+    #     get_module_attribute(caller.module, module_attribute_key, default)
+
+    #   value ->
+    #     value
+    # end
   end
 
   defp get_module_attribute(module, key) do

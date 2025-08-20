@@ -16,6 +16,7 @@ defmodule GraphqlQuery.MixProject do
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      dialyzer: dialyzer(),
       docs: docs(),
       package: package(),
       compilers: Mix.compilers()
@@ -42,6 +43,14 @@ defmodule GraphqlQuery.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       # Release deps
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+    ]
+  end
+
+  defp dialyzer do
+    [
+      plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+      plt_add_apps: [:iex, :mix],
+      ignore_warnings: ".dialyzer_ignore.exs"
     ]
   end
 

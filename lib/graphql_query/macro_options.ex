@@ -1,32 +1,38 @@
 defmodule GraphqlQuery.MacroOptions do
   @config_schema ignore: [
-                   type: {:or, [:boolean, nil]},
-                   default: nil,
+                   type: :boolean,
+                   default: false,
+                   required: false,
                    doc: "Ignore validation errors"
                  ],
                  type: [
                    type: :atom,
                    default: :query,
+                   required: false,
                    doc: "Type of the GraphQL document, either :query or :schema"
                  ],
                  schema: [
-                   type: :any,
+                   type: :atom,
                    default: :not_set,
+                   required: false,
                    doc: "Module that provides the GraphQL schema"
                  ],
                  evaluate: [
-                   type: {:or, [:boolean, nil]},
-                   default: nil,
+                   type: :boolean,
+                   default: false,
+                   required: false,
                    doc: "Try to evaluate dynamic parts of the document"
                  ],
                  runtime: [
-                   type: {:or, [:boolean, nil]},
-                   default: nil,
+                   type: :boolean,
+                   default: false,
+                   required: false,
                    doc: "Use runtime evaluation for the GraphQL query"
                  ],
                  fragments: [
                    type: {:list, :any},
                    default: [],
+                   required: false,
                    doc: "List of fragments to include in the query"
                  ]
 

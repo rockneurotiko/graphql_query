@@ -25,3 +25,4 @@ graphql_query-*.tar
 native/*/target
 priv/**/*.so
 checksum*
+priv/plts

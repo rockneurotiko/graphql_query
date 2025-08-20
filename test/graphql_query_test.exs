@@ -3,7 +3,432 @@ defmodule GraphqlQueryTest do
   import GraphqlQuery
   doctest GraphqlQuery
 
-  alias GraphqlQuery.Document
+  alias GraphqlQuery.{Document, Fragment}
+
+  describe "document_with_options/2" do
+    test "adds options to ~GQL sigil" do
+      query =
+        document_with_options ignore: true do
+          ~GQL"""
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              id
+              name
+            }
+          }
+          """
+        end
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query GetUser($id: ID!)"
+      assert result =~ "user(id: $id)"
+    end
+
+    test "adds options to ~GQL sigil with modifiers" do
+      query =
+        document_with_options ignore: true do
+          ~GQL"""
+          fragment UserFragment on User {
+            id
+            name
+            email
+          }
+          """f
+        end
+
+      assert %Fragment{fragment: result} = query
+      assert result =~ "fragment UserFragment on User"
+    end
+
+    test "adds runtime option to ~GQL sigil" do
+      # Should not validate at compile time but return the document
+      query =
+        document_with_options runtime: true do
+          ~GQL"""
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              ...NonExistentFragment
+            }
+          }
+          """
+        end
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "...NonExistentFragment"
+    end
+
+    test "options precedence - sigil modifiers override document_with_options" do
+      query =
+        document_with_options type: :query do
+          ~GQL"""
+          fragment UserFragment on User {
+            id
+            name
+          }
+          """f
+        end
+
+      # The 'f' modifier should take precedence over type: :query
+      assert %Fragment{} = query
+    end
+
+    test "adds options to gql macro with static content" do
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          query =
+            document_with_options ignore: true do
+              gql """
+              query GetUser($id: ID!) {
+                user(id: $id) {
+                  id
+                  name
+                }
+              }
+              """
+            end
+
+          assert %Document{query: result, type: :query} = query
+          assert result =~ "query GetUser($id: ID!)"
+        end)
+
+      # Should not have any warnings because ignore: true was applied
+      refute logs =~ "[GraphqlQuery]"
+    end
+
+    test "adds options to gql macro with existing options" do
+      defmodule TestGqlEvaluate1 do
+        import GraphqlQuery
+
+        defmodule TestFieldHelper do
+          def test_field, do: "email"
+        end
+
+        def query do
+          document_with_options evaluate: true do
+            gql [type: :query], """
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                id
+                name
+                #{TestFieldHelper.test_field()}
+              }
+            }
+            """
+          end
+        end
+      end
+
+      assert %Document{query: result, type: :query} = TestGqlEvaluate1.query()
+      assert result =~ "email"
+    end
+
+    test "options precedence - explicit gql options override document_with_options" do
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          query_ast =
+            quote do
+              document_with_options ignore: true do
+                gql [ignore: false], """
+                query GetUser($unused: String) {
+                  user {
+                    id
+                  }
+                }
+                """
+              end
+            end
+
+          {query, _} = Code.eval_quoted(query_ast)
+
+          assert %Document{} = query
+        end)
+
+      # Should have warnings because ignore: false overrides ignore: true
+      assert logs =~ "unused variable"
+    end
+
+    test "adds options to gql macro with dynamic content" do
+      defmodule TestGqlEvaluate2 do
+        import GraphqlQuery
+
+        defmodule TestHelper do
+          def get_fields, do: "id name email"
+        end
+
+        def query do
+          document_with_options evaluate: true do
+            gql """
+            query GetUser {
+              user {
+            #{TestHelper.get_fields()}
+              }
+            }
+            """
+          end
+        end
+      end
+
+      assert %Document{query: result, type: :query} = TestGqlEvaluate2.query()
+      assert result =~ "id name email"
+    end
+
+    test "adds runtime option to gql macro with local variables" do
+      query =
+        document_with_options runtime: true do
+          fields = ["id", "name", "email"]
+
+          gql """
+          query GetUser {
+            user {
+              #{Enum.join(fields, "\n")}
+            }
+          }
+          """
+        end
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "id\nname\nemail"
+    end
+
+    test "multiple gql calls in same document_with_options block" do
+      queries =
+        document_with_options ignore: true do
+          [
+            gql("query { user { id } }"),
+            gql("query { posts { title } }"),
+            ~GQL"{
+  comments {
+    content
+  }
+}
+"
+          ]
+        end
+
+      assert [%Document{}, %Document{}, %Document{}] = queries
+      assert Enum.all?(queries, fn %Document{type: type} -> type == :query end)
+    end
+
+    test "nested expressions with gql calls" do
+      result =
+        document_with_options ignore: true do
+          case :query do
+            :query ->
+              gql "query { user { id name } }"
+
+            :fragment ->
+              ~GQL"fragment User on User {
+  id
+}
+"f
+          end
+        end
+
+      assert %Document{query: query_str, type: :query} = result
+      assert query_str =~ "query { user { id name } }"
+    end
+
+    test "adds options to gql_from_file macro" do
+      query =
+        document_with_options ignore: true do
+          gql_from_file("test/fixtures/test_query.graphql")
+        end
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query GetUser($id: ID!)"
+      assert result =~ "user(id: $id)"
+    end
+
+    test "adds options to gql_from_file with existing options" do
+      fragment =
+        document_with_options ignore: true do
+          gql_from_file("test/fixtures/test_fragment.graphql", type: :fragment)
+        end
+
+      assert %Fragment{fragment: result} = fragment
+      assert result =~ "fragment UserFields on User"
+    end
+
+    test "options precedence - explicit gql_from_file options override document_with_options" do
+      # It needs to be in a module, because gql_from_file put a module attribute
+      query_ast =
+        quote do
+          defmodule GqlFromFileInvalid do
+            use GraphqlQuery
+
+            def query do
+              document_with_options ignore: true do
+                gql_from_file("test/fixtures/invalid_query.graphql", ignore: false)
+              end
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      # Should have warnings because ignore: false overrides ignore: true
+      assert logs =~ "unused variable"
+
+      call_ast =
+        quote do
+          GqlFromFileInvalid.query()
+        end
+
+      {query, logs} =
+        ExUnit.CaptureIO.with_io(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query InvalidQuery($unused: String"
+      assert logs == ""
+    end
+
+    test "gql_from_file inherits runtime option" do
+      ast =
+        quote do
+          defmodule TestGqlFromFileRuntime do
+            import GraphqlQuery
+
+            def query do
+              document_with_options runtime: true do
+                gql_from_file("test/fixtures/invalid_query.graphql")
+              end
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(ast)
+        end)
+
+      assert logs == ""
+
+      runtime_ast =
+        quote do
+          TestGqlFromFileRuntime.query()
+        end
+
+      {query, logs} =
+        ExUnit.CaptureLog.with_log(fn ->
+          {query, _} = Code.eval_quoted(runtime_ast)
+          query
+        end)
+
+      # Now we have warning logs because it was checked on runtime
+      assert logs =~ "unused variable"
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query InvalidQuery($unused: String"
+    end
+
+    test "multiple gql_from_file calls with different types" do
+      results =
+        document_with_options ignore: true do
+          {
+            gql_from_file("test/fixtures/test_query.graphql"),
+            gql_from_file("test/fixtures/test_fragment.graphql", type: :fragment)
+          }
+        end
+
+      assert {%Document{type: :query}, %Fragment{}} = results
+    end
+
+    test "mixed macro calls in document_with_options" do
+      results =
+        document_with_options ignore: true do
+          %{
+            sigil: ~GQL"{
+  user {
+    id
+  }
+}
+",
+            gql_macro: gql("query { posts { title } }"),
+            from_file: gql_from_file("test/fixtures/test_query.graphql")
+          }
+        end
+
+      assert %{
+               sigil: %Document{type: :query},
+               gql_macro: %Document{type: :query},
+               from_file: %Document{type: :query}
+             } = results
+    end
+
+    test "nested document_with_options blocks" do
+      result =
+        document_with_options ignore: true do
+          document_with_options type: :fragment do
+            gql """
+            fragment UserData on User {
+              id
+              name
+            }
+            """
+          end
+        end
+
+      # Inner options should take precedence
+      assert %Fragment{} = result
+    end
+
+    test "document_with_options with fragments option" do
+      _fragment =
+        document_with_options type: :fragment do
+          ~GQL"""
+          fragment TestFragment on User {
+            id
+            email
+          }
+          """f
+        end
+
+      # Note: This test focuses on the document_with_options functionality
+      # The fragment integration would require more complex setup
+      query =
+        document_with_options ignore: true do
+          ~GQL"""
+          query GetUserWithFragment {
+            user {
+              ...TestFragment
+            }
+          }
+          """
+        end
+
+      assert %Document{type: :query} = query
+    end
+
+    test "document_with_options with evaluate option" do
+      defmodule TestGqlEvaluate3 do
+        import GraphqlQuery
+
+        defmodule TestEvaluateHelper do
+          def get_user_fields, do: "id name email"
+        end
+
+        def query do
+          document_with_options evaluate: true do
+            gql """
+            query GetUser {
+              user {
+            #{TestEvaluateHelper.get_user_fields()}
+              }
+            }
+            """
+          end
+        end
+      end
+
+      assert %Document{query: result} = TestGqlEvaluate3.query()
+      assert result =~ "id name email"
+    end
+  end
 
   describe "~GQL sigil" do
     test "returns the same query string when valid" do
@@ -210,7 +635,7 @@ defmodule GraphqlQueryTest do
     end
 
     test "works with evaluate option and module calls" do
-      defmodule TestGqlEvaluate do
+      defmodule TestGqlEvaluate4 do
         import GraphqlQuery
 
         defmodule Helper do
@@ -240,7 +665,7 @@ defmodule GraphqlQueryTest do
         end
       end
 
-      assert %Document{query: result, type: :query} = TestGqlEvaluate.query_with_evaluate()
+      assert %Document{query: result, type: :query} = TestGqlEvaluate4.query_with_evaluate()
       assert result =~ "...UserIdentifier"
       assert result =~ "name\nsurname"
       assert result =~ "fragment UserIdentifier on User"
@@ -356,23 +781,24 @@ defmodule GraphqlQueryTest do
     end
 
     test "ignore option suppresses warnings" do
-      module = """
-      defmodule TestGqlIgnoreWarnings do
-        import GraphqlQuery
+      module =
+        quote do
+          defmodule TestGqlIgnoreWarnings do
+            import GraphqlQuery
 
-        defmodule Helper do
-          def some_field, do: "name"
-        end
+            defmodule Helper do
+              def some_field, do: "name"
+            end
 
-        def query_with_ignore do
-          gql [ignore: true], "query { \#{Helper.some_field()} }"
+            def query_with_ignore do
+              gql [ignore: true], "query { #{Helper.some_field()} }"
+            end
+          end
         end
-      end
-      """
 
       logs =
         ExUnit.CaptureIO.capture_io(:stderr, fn ->
-          Code.compile_string(module)
+          Code.compile_quoted(module)
         end)
 
       # Should not contain any GraphqlQuery warnings
@@ -407,27 +833,28 @@ defmodule GraphqlQueryTest do
     end
 
     test "validates and warns about invalid GraphQL in gql macro" do
-      module = """
-      defmodule TestGqlValidation do
-        import GraphqlQuery
+      ast =
+        quote do
+          defmodule TestGqlValidationUnusedField do
+            import GraphqlQuery
 
-        @fields "id name"
+            @fields "id name"
 
-        def invalid_query do
-          gql \"""
-          query GetUser($unused: String) {
-            user {
-              \#{@fields}
-            }
-          }
-          \"""
+            def invalid_query do
+              gql """
+              query GetUser($unused: String) {
+                user {
+                  #{@fields}
+                }
+              }
+              """
+            end
+          end
         end
-      end
-      """
 
       logs =
         ExUnit.CaptureIO.capture_io(:stderr, fn ->
-          Code.compile_string(module)
+          Code.compile_quoted(ast)
         end)
 
       assert logs =~ "warning"
@@ -437,19 +864,15 @@ defmodule GraphqlQueryTest do
 
   describe "compile warnings" do
     test "compile warning" do
-      module = """
-      defmodule TestSigilWarning do
-        import GraphqlQuery
-
-        def wrong_query do
+      ast =
+        quote do
+          import GraphqlQuery
           ~GQL"{}"
         end
-      end
-      """
 
       logs =
         ExUnit.CaptureIO.capture_io(:stderr, fn ->
-          Code.compile_string(module)
+          Code.compile_quoted(ast)
         end)
 
       assert logs =~ "warning"
