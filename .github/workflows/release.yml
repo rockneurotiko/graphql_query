@@ -17,6 +17,9 @@ on:
       - ".github/workflows/release.yml"
   workflow_dispatch:
 
+concurrency:
+  group: graphql-query-nif-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build_release:

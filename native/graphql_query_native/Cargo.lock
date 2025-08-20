@@ -275,6 +275,7 @@ name = "graphql_query_native"
 version = "0.1.0"
 dependencies = [
  "apollo-compiler",
+ "regex",
  "rustler",
 ]
 

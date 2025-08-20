@@ -23,6 +23,11 @@ defmodule GraphqlQuery.MacroOptions do
                    type: {:or, [:boolean, nil]},
                    default: nil,
                    doc: "Use runtime evaluation for the GraphQL query"
+                 ],
+                 fragments: [
+                   type: {:list, :any},
+                   default: [],
+                   doc: "List of fragments to include in the query"
                  ]
 
   @moduledoc """
@@ -31,7 +36,7 @@ defmodule GraphqlQuery.MacroOptions do
 
   • :ignore (boolean()) - Ignore validation errors The default value is false.
 
-  • :type (:query | :schema) - Type of the GraphQL document, either :query or
+  • :type (:query | :schema | :fragment) - Type of the GraphQL document, either :query or
     :schema The default value is :query.
 
   • :schema (module()) - Module that provides the GraphQL schema The default value is
@@ -48,17 +53,48 @@ defmodule GraphqlQuery.MacroOptions do
 
   @type t :: %__MODULE__{
           ignore: boolean() | nil,
-          type: :query | :schema,
+          type: :query | :schema | :fragment,
           schema: module() | nil,
           evaluate: boolean() | nil,
-          runtime: boolean() | nil
+          runtime: boolean() | nil,
+          fragments: list(GraphqlQuery.Fragment.t())
         }
 
+  @doc """
+  Returns documentation string for available macro options.
+
+  Provides detailed documentation for all configuration options
+  that can be passed to GraphQL macros.
+
+  ## Examples
+
+      iex> docs = GraphqlQuery.MacroOptions.docs()
+      iex> is_binary(docs)
+      true
+
+  """
   @spec docs() :: String.t()
   def docs do
     NimbleOptions.docs(@config_schema)
   end
 
+  @doc """
+  Validates macro options against the schema.
+
+  Validates and normalizes options for GraphQL macros, returning
+  either a valid options struct or an error.
+
+  ## Examples
+
+      iex> {:ok, opts} = GraphqlQuery.MacroOptions.validate([type: :query, ignore: true])
+      iex> opts.type
+      :query
+      iex> opts.ignore
+      true
+
+      iex> {:error, _reason} = GraphqlQuery.MacroOptions.validate([ignore: "invalid"])
+
+  """
   @spec validate(Keyword.t()) :: {:ok, __MODULE__.t()} | {:error, term()}
   def validate(opts) do
     case NimbleOptions.validate(opts, @config_schema) do
@@ -70,7 +106,19 @@ defmodule GraphqlQuery.MacroOptions do
     end
   end
 
-  @spec validate!(Keyword.t()) :: Keyword.t() | no_return()
+  @doc """
+  Validates macro options against the schema, raising on error.
+
+  Like `validate/1` but raises an `ArgumentError` if validation fails.
+
+  ## Examples
+
+      iex> opts = GraphqlQuery.MacroOptions.validate!([type: :fragment])
+      iex> opts.type
+      :fragment
+
+  """
+  @spec validate!(Keyword.t()) :: __MODULE__.t() | no_return()
   def validate!(opts) do
     case validate(opts) do
       {:ok, validated_opts} -> validated_opts
