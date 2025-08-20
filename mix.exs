@@ -55,6 +55,8 @@ defmodule GraphqlQuery.MixProject do
         GraphqlQuery: [
           GraphqlQuery,
           GraphqlQuery.Schema,
+          GraphqlQuery.Document,
+          GraphqlQuery.Fragment,
           GraphqlQuery.MacroOptions,
           GraphqlQuery.ValidationError,
           GraphqlQuery.Location,

@@ -1,5 +1,8 @@
 defmodule GraphqlQuery.FragmentTest do
   use ExUnit.Case
+
+  doctest GraphqlQuery.Fragment
+
   alias GraphqlQuery.{Fragment, Document}
 
   describe "Fragment struct" do

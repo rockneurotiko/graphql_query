@@ -176,13 +176,14 @@ defmodule GraphqlQuery.DocumentTest do
       assert length(updated_document.fragments) == 2
     end
 
-    test "only_fragments/1 filters out non-fragment items" do
+    test "only_fragments/1 filters out non-fragment items and uniq by name" do
+      query = Document.new("query { user { id } }")
       fragment = Document.new("fragment UserFields on User { id name }", type: :fragment)
 
       mixed_list = [fragment, "not a fragment", %{not: "fragment"}, fragment]
-      result = Document.only_fragments(mixed_list)
+      query = Document.add_fragments(query, mixed_list)
 
-      assert result == [fragment, fragment]
+      assert query.fragments == [fragment]
     end
   end
 

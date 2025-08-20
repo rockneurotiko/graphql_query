@@ -8,6 +8,28 @@ defmodule GraphqlQuery do
 
   alias __MODULE__.{Parser, Document, Validator}
 
+  @doc """
+  Sets up the module to use GraphQL query macros and validation.
+
+  ## Options
+
+    * `:schema` - Schema module implementing GraphqlQuery.Schema behaviour
+    * `:runtime` - Whether to validate queries at runtime (default: false)
+    * `:ignore` - Whether to ignore validation errors (default: false)
+    * `:evaluate` - Whether to try evaluating dynamic parts at compile time (default: false)
+    * `:fragments` - List of fragments to include in queries (default: [])
+
+  ## Examples
+
+      defmodule MyApp.Queries do
+        use GraphqlQuery, schema: MyApp.Schema
+
+        def get_user do
+          ~GQL"query { user { id name } }"
+        end
+      end
+
+  """
   defmacro __using__(opts) do
     module = __CALLER__.module
     schema = opts[:schema]
@@ -40,6 +62,33 @@ defmodule GraphqlQuery do
     |> Enum.flat_map(fn {_, behaviours} -> behaviours end)
   end
 
+  @doc """
+  Loads and validates GraphQL queries from external files.
+
+  Automatically tracks file dependencies for recompilation and validates
+  the loaded content at compile time.
+
+  ## Options
+
+    * `:type` - Document type (:query, :schema, :fragment) (default: :query)
+    * `:ignore` - Skip validation (default: false)
+    * `:schema` - Schema module for validation (default: module schema if set)
+    * `:fragments` - List of fragments to include (default: [])
+
+  ## Examples
+
+      # Load a query file
+      query = gql_from_file("priv/queries/get_user.graphql")
+
+      # Load a fragment with schema validation
+      fragment = gql_from_file("priv/fragments/user.gql",
+                               type: :fragment,
+                               schema: MyApp.Schema)
+
+      # Load schema
+      schema = gql_from_file("priv/schema.graphql", type: :schema)
+
+  """
   defmacro gql_from_file(file_path, opts \\ []) do
     Module.put_attribute(__CALLER__.module, :external_resource, file_path)
     caller = __CALLER__
@@ -73,6 +122,39 @@ defmodule GraphqlQuery do
     Macro.escape(query)
   end
 
+  @doc """
+  Creates GraphQL documents with dynamic content and validation.
+
+  Supports both static and dynamic queries with compile-time validation.
+  Can expand module attributes and function calls when `evaluate: true` is set.
+
+  ## Options
+
+    * `:type` - Document type (:query, :schema, :fragment) (default: :query)
+    * `:ignore` - Skip validation (default: false)
+    * `:runtime` - Validate at runtime instead of compile-time (default: false)
+    * `:evaluate` - Try to expand function calls at compile time (default: false)
+    * `:schema` - Schema module for validation (default: module schema if set)
+    * `:fragments` - List of fragments to include (default: [])
+
+  ## Examples
+
+      # Static query with module attribute
+      @fields "id name email"
+      query = gql "query { user { \#{@fields} } }"
+
+      # Dynamic query with fragments
+      query = gql [fragments: [@user_fragment]], "query { user { ...UserFragment } }"
+
+      # Runtime validation for fully dynamic content
+      def build_query(field_list) do
+        gql [runtime: true], "query { user { \#{field_list} } }"
+      end
+
+      # Schema validation
+      query = gql [schema: MyApp.Schema], "query { user { id name } }"
+
+  """
   defmacro gql(opts \\ [], ast)
 
   defmacro gql(opts, content) when is_binary(content) do
@@ -223,19 +305,90 @@ defmodule GraphqlQuery do
   end
 
   @doc """
-  GraphQL sigil that validates static queries at compile time and prints warnings for any errors.
+  GraphQL sigil for static queries with compile-time validation.
 
-  Usage:
+  Validates GraphQL queries, mutations, schemas, and fragments at compile time,
+  providing immediate feedback on syntax errors, unused variables, and schema violations.
+  Best suited for static GraphQL content without dynamic interpolation.
+
+  ## Modifiers
+
+  The sigil supports several modifiers that can be combined:
+
+    * `i` - Ignore validation warnings
+    * `r` - Validate at runtime instead of compile-time
+    * `s` - Parse as schema document
+    * `q` - Parse as query document (default)
+    * `f` - Parse as fragment document
+
+  ## Examples
+
+  ### Basic Query
+
       import GraphqlQuery
 
       ~GQL\"\"\"
       query GetUser($id: ID!) {
         user(id: $id) {
+          id
           name
           email
         }
       }
       \"\"\"
+
+  ### Schema Definition
+
+      ~GQL\"\"\"
+      type User {
+        id: ID!
+        name: String!
+        email: String!
+      }
+
+      type Query {
+        user(id: ID!): User
+      }
+      \"\"\"s
+
+  ### Fragment Definition
+
+      ~GQL\"\"\"
+      fragment UserData on User {
+        id
+        name
+        email
+      }
+      \"\"\"f
+
+  ### Ignoring Validation Warnings
+
+      # For queries with intentional unused variables
+      ~GQL\"\"\"
+      query GetUser($id: ID!, $unused: String) {
+        user(id: $id) { name }
+      }
+      \"\"\"i
+
+  ### Runtime Validation
+
+      # When fragments will be added later
+      ~GQL\"\"\"
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          ...UserFragment
+        }
+      }
+      \"\"\"r |> GraphqlQuery.Document.add_fragment(user_fragment)
+
+  ## Integration with Mix Format
+
+  The sigil integrates with `mix format` when the formatter plugin is configured:
+
+      # .formatter.exs
+      [
+        plugins: [GraphqlQuery.Formatter]
+      ]
   """
   defmacro sigil_GQL({:<<>>, meta, [query_string]}, opts) do
     # Validate at compile time

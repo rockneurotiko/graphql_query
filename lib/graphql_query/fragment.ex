@@ -12,6 +12,22 @@ defmodule GraphqlQuery.Fragment do
           schema: module() | nil
         }
 
+  @doc """
+  Converts a GraphQL Document struct into a Fragment struct.
+
+  Takes a Document that was created with `type: :fragment` and converts it
+  to the appropriate Fragment representation.
+
+  ## Examples
+
+      iex> document = GraphqlQuery.Document.new("fragment UserData on User { id name }", name: "UserData", type: :query)
+      iex> fragment = GraphqlQuery.Fragment.from_query(document)
+      iex> fragment.name
+      "UserData"
+      iex> fragment.fragment
+      "fragment UserData on User { id name }"
+
+  """
   def from_query(%GraphqlQuery.Document{} = document) do
     query = to_string(document)
 
