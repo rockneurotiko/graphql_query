@@ -242,28 +242,54 @@ defmodule GraphqlQuery.Document do
   defimpl Inspect do
     import Inspect.Algebra
 
-    @doc "Inspect a GraphQL query document for debugging purposes."
-    def inspect(gql_query, opts) do
-      name =
-        if gql_query.name,
-          do: Inspect.BitString.inspect(gql_query.name, opts),
-          else: Inspect.Atom.inspect(nil, opts)
+    if Version.match?(System.version(), ">= 1.19.0-rc.0") do
+      @doc "Inspect a GraphQL query document for debugging purposes."
+      def inspect(gql_query, opts) do
+        {name, opts} = to_doc_with_opts(gql_query.name, opts)
 
-      fragments = gql_query.fragments |> Enum.map(&to_string/1)
+        {fragments, opts} = to_doc_with_opts(gql_query.fragments, opts)
+        {query, opts} = to_doc_with_opts(gql_query.query, opts)
+        {schema, opts} = to_doc_with_opts(gql_query.schema, opts)
+        {variables, opts} = to_doc_with_opts(gql_query.variables, opts)
 
-      concat([
-        "#GraphqlQuery.Document<name: ",
-        name,
-        ", query: ",
-        Inspect.BitString.inspect(gql_query.query, opts),
-        ", schema: ",
-        Inspect.Atom.inspect(gql_query.schema, opts),
-        ", variables: ",
-        Inspect.Map.inspect(gql_query.variables, opts),
-        ", fragments: ",
-        Inspect.List.inspect(fragments, opts),
-        ">"
-      ])
+        {concat([
+           "#GraphqlQuery.Document<name: ",
+           name,
+           ", query: ",
+           query,
+           ", schema: ",
+           schema,
+           ", variables: ",
+           variables,
+           ", fragments: ",
+           fragments,
+           ">"
+         ]), opts}
+      end
+    else
+      @doc "Inspect a GraphQL query document for debugging purposes."
+      def inspect(gql_query, opts) do
+        name =
+          if gql_query.name,
+            do: Inspect.BitString.inspect(gql_query.name, opts),
+            else: Inspect.Atom.inspect(nil, opts)
+
+        fragments = gql_query.fragments |> Enum.map(&to_string/1)
+
+        concat([
+          "#GraphqlQuery.Document<name: ",
+          name,
+          ", query: ",
+          Inspect.BitString.inspect(gql_query.query, opts),
+          ", schema: ",
+          Inspect.Atom.inspect(gql_query.schema, opts),
+          ", variables: ",
+          Inspect.Map.inspect(gql_query.variables, opts),
+          ", fragments: ",
+          Inspect.List.inspect(fragments, opts),
+          ">"
+        ])
+      end
     end
   end
 end
