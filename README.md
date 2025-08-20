@@ -14,10 +14,11 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 
 ## Table of Contents
 
-- [Quick Start](#quick-start)
-- [Installation with examples](#installation)
 - [Why This Library?](#why-this-library)
 - [Features](#features)
+- [Quick Start](#quick-start)
+  - [Installation](#installation)
+  - [Examples](#examples)
 - [Usage](#usage)
   - [~GQL Sigil](#gql-sigil)
   - [gql Macro](#gql-macro)
@@ -41,7 +42,33 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 
 ---
 
+## Why This Library?
 
+- **Developer tool**: Focused on **validation, formatting, compile-time and runtime safety**.
+- **External APIs integration**: Build and validate queries against external GraphQL APIs. Never miss a deprecated field, a type error in the arguments or a typo in the fields you are fetching.
+- **Best match for your tests**: Use in your tests to build and validate queries against any GraphQL schema (external APIs, you own Absinthe schema, ...), catch issues early on development.
+- **Not a GraphQL server**: Unlike [Absinthe](https://hex.pm/packages/absinthe), this library does not execute queries.
+
+---
+
+## Features
+
+- ✅ **GraphQL query validation** (syntax, unused vars, fragments, spec compliance)
+- ✅ **Schema parsing and validation** (from strings or files)
+- ✅ **Fragment support** with composition, reusability, and validation
+- ✅ **Schema-aware query, mutation and fragments validation** (detect invalid fields/types)
+- ✅ **Compile-time macros**:
+  - `~GQL` sigil for static queries
+  - `gql_from_file` for file-based queries
+  - `gql` macro for dynamic queries
+- ✅ **Query formatting** with consistent indentation
+- ✅ **Mix format integration** for `~GQL` sigil, `.graphql` and `.gql` files
+- ✅ **Schema modules** with automatic recompilation on schema changes
+- ✅ **Flexible validation modes**: compile-time, runtime, or ignore
+- ✅ **JSON encoding support** for Document structs (JSON/Jason protocols)
+- ⚡ Backed by Rust for fast parsing and validation
+
+---
 
 ## Quick Start
 
@@ -65,7 +92,9 @@ mix deps.get
 
 No Rust installation required — precompiled binaries are used.
 
-### Example: Compile-time Query Validation
+### Examples
+
+#### Example: Compile-time Query Validation
 
 ```elixir
 import GraphqlQuery
@@ -91,7 +120,7 @@ query GetUser($unused: String!) {
 # Error: unused variable: `$unused` at file.ex:10:1 - variable is never used
 ```
 
-### Example: Schema Validation
+#### Example: Schema Validation
 
 ```elixir
 defmodule MyApp.Schema do
@@ -115,7 +144,7 @@ defmodule MyApp.Queries do
 end
 ```
 
-### Example: Usage in requests
+#### Example: Usage in requests
 
 ```elixir
 query = gql [fragments: [@user_fragment]], """
@@ -126,36 +155,6 @@ user = "1"
 user_query = GraphqlQuery.Document.add_variable(query, :id, user)
 Req.post!("/api", json: user_query)
 ```
-
----
-
-## Why This Library?
-
-- **Developer tool**: Focused on **validation, formatting, compile-time and runtime safety**.
-- **External APIs integration**: Build and validate queries against external GraphQL APIs. Never miss a deprecated field, a type error in the arguments or a typo in the fields you are fetching.
-- **Best match for your tests**: Use in your tests to build and validate queries against any GraphQL schema (external APIs, you own Absinthe schema, ...), catch issues early on development.
-- **Not a GraphQL server**: Unlike [Absinthe](https://hex.pm/packages/absinthe), this library does not execute queries.
-
----
-
-## Features
-
-- ✅ **GraphQL query validation** (syntax, unused vars, fragments, spec compliance)
-- ✅ **Schema parsing and validation** (from strings or files)
-- ✅ **Schema-aware query validation** (detect invalid fields/types)
-- ✅ **Document and Fragment structs** with structured query representation
-- ✅ **Fragment support** with composition, reusability, and validation
-- ✅ **Compile-time macros**:
-  - `~GQL` sigil for static queries
-  - `gql` macro for dynamic queries
-  - `gql_from_file` for file-based queries
-- ✅ **Query formatting** with consistent indentation
-- ✅ **Mix format integration** for `~GQL` sigil, `.graphql` and `.gql` files
-- ✅ **Schema modules** with automatic recompilation on schema changes
-- ✅ **Flexible validation modes**: compile-time, runtime, or ignore
-- ✅ **JSON encoding support** for Document structs (JSON/Jason protocols)
-- ✅ **Manual API**: `GraphqlQuery.Validator.validate`, `GraphqlQuery.Format.format`
-- ⚡ Backed by Rust for fast parsing and validation
 
 ---
 
@@ -221,6 +220,49 @@ query GetUser($id: ID!) {
 
 ---
 
+### `gql_from_file` Macro
+- Load queries or schemas from `.graphql` or `.gql` files.
+- Validates at compile time.
+- Tracks file changes for recompilation.
+- Options:
+  - `ignore: true` → skip validation
+  - `type: :query | :schema | :fragment` → Specify if the content shall be validated as query, schema or fragment
+  - `schema: SchemaModule` → Specify the schema module to validate the query or fragment with
+  - `fragments: [GraphqlQuery.Fragment.t()]` → Add reusable fragments to queries
+
+Example project structure:
+
+```text
+priv/
+├── graphql/
+|   ├── schema.graphql
+|   ├── get_user.graphql
+|   └── create_user.gql
+|   └── user_fragment.gql
+```
+
+```elixir
+defmodule MyApp.Schema do
+  use GraphqlQuery.Schema, schema_path: "priv/graphql/schema.graphql"
+end
+
+defmodule MyApp.Queries do
+  use GraphqlQuery, schema: MyApp.Schema
+
+  @user_fragment gql_from_file "priv/graphql/user_fragment.gql", type: :fragment
+
+  def get_user_query do
+    gql_from_file "priv/graphql/get_user.graphql", fragments: [@user_fragment]
+  end
+
+  def create_user_mutation do
+    gql_from_file "priv/graphql/create_user.gql", schema: MyApp.Schema
+  end
+end
+```
+
+---
+
 ### `gql` Macro
 - Supports **dynamic queries** with interpolation.
 - Options:
@@ -275,49 +317,6 @@ defmodule Example do
       user(id: #{user_id}) { name }
     }
     """
-  end
-end
-```
-
----
-
-### `gql_from_file` Macro
-- Load queries or schemas from `.graphql` or `.gql` files.
-- Validates at compile time.
-- Tracks file changes for recompilation.
-- Options:
-  - `ignore: true` → skip validation
-  - `type: :query | :schema | :fragment` → Specify if the content shall be validated as query, schema or fragment
-  - `schema: SchemaModule` → Specify the schema module to validate the query or fragment with
-  - `fragments: [GraphqlQuery.Fragment.t()]` → Add reusable fragments to queries
-
-Example project structure:
-
-```text
-priv/
-├── graphql/
-|   ├── schema.graphql
-|   ├── get_user.graphql
-|   └── create_user.gql
-|   └── user_fragment.gql
-```
-
-```elixir
-defmodule MyApp.Schema do
-  use GraphqlQuery.Schema, schema_path: "priv/graphql/schema.graphql"
-end
-
-defmodule MyApp.Queries do
-  use GraphqlQuery, schema: MyApp.Schema
-
-  @user_fragment gql_from_file "priv/graphql/user_fragment.gql", type: :fragment
-
-  def get_user_query do
-    gql_from_file "priv/graphql/get_user.graphql", fragments: [@user_fragment]
-  end
-
-  def create_user_mutation do
-    gql_from_file "priv/graphql/create_user.gql", schema: MyApp.Schema
   end
 end
 ```
@@ -565,80 +564,11 @@ Now `mix format` will:
 
 You shouldn't need to use the manual API, but if you need to, you can do everything yourself.
 
-### Document and Fragment APIs
-
-You can manually create you documents and fragments instead of using the macros.
-
-```elixir
-alias GraphqlQuery.{Document, Fragment}
-
-# Create fragments
-fragment = Document.new("fragment UserFragment on User { name }", name: "UserFragment", type: :fragment)
-
-# Create documents
-query_string = "query GetUser($id: ID!) { user(id: $id) { name } }"
-document = Document.new(query_string)
-query_string = "query GetUser($id: ID!) { user(id: $id) { ...UserFragment } }"
-document = Document.new(query_string, schema: MySchema, fragments: [fragment])
-
-# Manipulate query documents
-document = Document.add_variable(document, :id, "123")
-document = Document.add_variables(document, %{limit: 10})
-document = Document.add_fragment(document, user_fragment)
-document = Document.set_schema(document, NewSchema)
-
-# Convert to string (includes fragments)
-query_with_fragments = to_string(document)
-
-# JSON encoding (works with Jason and JSON libraries)
-Jason.encode!(document)  # => {"query": "...", "variables": {...}}
-```
-
-### Validation API
-
-```elixir
-# Validate query string
-GraphqlQuery.Validator.validate("""
-query GetUser($id: ID!) { user(id: $id) { name } }
-""")
-# => :ok
-
-# Invalid query
-GraphqlQuery.Validator.validate("query T($unused: String) { field }")
-# => {:error, [%GraphqlQuery.ValidationError{}]}
-
-# Validate a schema
-GraphqlQuery.Validator.validate(schema, schema_path, nil, :schema)
-
-# Validate a query with a schema (schema_module must implement GraphqlQuery.Schema)
-GraphqlQuery.Validator.validate(query, query_path, schema_module, :query)
-
-# Validate a fragment with a schema
-GraphqlQuery.Validator.validate(fragment, fragment_path, schema_module, :fragment)
-
-# Validate Document struct of any type (:query, :schema or :fragment)
-document = GraphqlQuery.Document.new("query GetUser { user { id } }")
-GraphqlQuery.Validator.validate(document)
-# => :ok
-```
-
-
-### Formatting API
-
-Format any GraphQL document (schema, query, fragment)
-
-```elixir
-# Format query string
-GraphqlQuery.Format.format("query GetUser($id: ID!){user(id:$id){name email}}")
-# => """
-# query GetUser($id: ID!) {
-#   user(id: $id) {
-#     name
-#     email
-#   }
-# }
-# """
-```
+Check the this modules documentation if you want to know more about the manual API:
+- [GraphqlQuery.Document](https://hexdocs.pm/graphql_query/GraphqlQuery.Document.html)
+- [GraphqlQuery.Fragment](https://hexdocs.pm/graphql_query/GraphqlQuery.Fragment.html)
+- [GraphqlQuery.Validator](https://hexdocs.pm/graphql_query/GraphqlQuery.Validator.html)
+- [GraphqlQuery.Format](https://hexdocs.pm/graphql_query/GraphqlQuery.Format.html)
 
 ---
 

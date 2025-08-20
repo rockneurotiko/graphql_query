@@ -12,8 +12,42 @@ defmodule GraphqlQuery.Validator do
   @type validation_error :: GraphqlQuery.ValidationError.t()
 
   @doc """
-  Validates a GraphQL query string.
-  Returns :ok if valid, {:error, [String.t()]} if invalid with detailed error messages.
+  Validates GraphQL documents.
+
+  Accepts different input types:
+  - String queries
+  - GraphqlQuery.Document structs  
+  - GraphqlQuery.Fragment structs
+
+  Returns :ok if valid, {:error, [validation_error()]} if invalid with detailed error messages.
+
+  ## Examples
+
+  ### String query validation
+
+      iex> GraphqlQuery.Validator.validate(~s|query GetUser($id: ID!) { user(id: $id) { name } }|)
+      :ok
+
+      iex> result = GraphqlQuery.Validator.validate("query T($unused: String) { field }")
+      iex> match?({:error, [%GraphqlQuery.ValidationError{} | _]}, result)
+      true
+
+  ### Document struct validation
+
+      iex> document = GraphqlQuery.Document.new("query GetUser { user { id } }")
+      iex> GraphqlQuery.Validator.validate(document)
+      :ok
+
+      iex> schema_doc = GraphqlQuery.Document.new("type Query { field: String }", type: :schema)
+      iex> GraphqlQuery.Validator.validate(schema_doc)
+      :ok
+
+  ### Fragment struct validation
+
+      iex> fragment = GraphqlQuery.Document.new("fragment UserFields on User { id name }", name: "UserFields", type: :fragment)
+      iex> GraphqlQuery.Validator.validate(fragment)
+      :ok
+
   """
   @spec validate(String.t()) :: :ok | {:error, [validation_error()]}
   def validate(query) when is_binary(query) do
@@ -35,8 +69,35 @@ defmodule GraphqlQuery.Validator do
   end
 
   @doc """
-  Validates a GraphQL query string with a specific document path.
-  Returns :ok if valid, {:error, [String.t()]} if invalid with detailed error messages.
+  Validates a GraphQL query string with a specific document path and optional schema.
+  Returns :ok if valid, {:error, [validation_error()]} if invalid with detailed error messages.
+
+  ## Examples
+
+  ### Schema validation
+
+      iex> schema = ~s|type Query { field: String }|
+      iex> GraphqlQuery.Validator.validate(schema, "schema.graphql", nil, :schema)
+      :ok
+
+  ### Query validation without schema
+
+      iex> query = ~s|query GetUser($id: ID!) { user(id: $id) { name } }|
+      iex> GraphqlQuery.Validator.validate(query, "query.graphql", nil, :query)
+      :ok
+
+  ### Fragment validation without schema
+
+      iex> fragment = ~s|fragment UserFields on User { id name email }|
+      iex> GraphqlQuery.Validator.validate(fragment, "fragment.graphql", nil, :fragment)
+      :ok
+
+  ### Document struct validation
+
+      iex> document = GraphqlQuery.Document.new("query GetUser { user { id } }")
+      iex> GraphqlQuery.Validator.validate(document)
+      :ok
+
   """
 
   @spec validate(String.t(), String.t(), module() | nil, document_type()) ::

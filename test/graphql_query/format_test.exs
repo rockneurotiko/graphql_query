@@ -1,6 +1,8 @@
 defmodule GraphqlQuery.FormatTest do
   use ExUnit.Case
 
+  doctest GraphqlQuery.Format
+
   alias GraphqlQuery.Format
 
   describe "format/1" do

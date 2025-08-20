@@ -2,6 +2,8 @@ defmodule GraphqlQuery.DocumentTest do
   use ExUnit.Case
   alias GraphqlQuery.Document
 
+  doctest GraphqlQuery.Document
+
   describe "Document.new/2" do
     test "creates document with default options" do
       query = "query { user { id } }"

@@ -1,6 +1,8 @@
 defmodule GraphqlQuery.ValidatorTest do
   use ExUnit.Case
 
+  doctest GraphqlQuery.Validator
+
   alias GraphqlQuery.{Validator, Document}
 
   describe "validate/1" do
