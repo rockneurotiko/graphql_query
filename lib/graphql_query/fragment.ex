@@ -3,13 +3,16 @@ defmodule GraphqlQuery.Fragment do
   Struct representation of a GraphQL fragment.
   """
 
-  defstruct [:name, :fragment, :path, :schema]
+  alias GraphqlQuery.{Document, DocumentInfo, Fragment, Signature}
+
+  defstruct [:name, :fragment, :path, :schema, :document_info]
 
   @type t :: %__MODULE__{
           name: String.t(),
           fragment: String.t(),
           path: String.t() | nil,
-          schema: module() | nil
+          schema: module() | nil,
+          document_info: DocumentInfo.t() | nil
         }
 
   @doc """
@@ -28,7 +31,7 @@ defmodule GraphqlQuery.Fragment do
       "fragment UserData on User { id name }"
 
   """
-  def from_query(%GraphqlQuery.Document{} = document) do
+  def from_query(%Document{} = document) do
     query = to_string(document)
 
     %__MODULE__{
@@ -39,8 +42,20 @@ defmodule GraphqlQuery.Fragment do
     }
   end
 
+  @spec set_document_info(t(), DocumentInfo.t() | nil) :: t()
+  def set_document_info(%__MODULE__{} = fragment, %DocumentInfo{} = document_info) do
+    # If more than one fragments, warning?
+    signature = Signature.signature(fragment)
+    document_info = DocumentInfo.add_signature(document_info, signature)
+    %{fragment | document_info: document_info}
+  end
+
+  def set_document_info(%__MODULE__{} = fragment, _) do
+    %{fragment | document_info: nil}
+  end
+
   defimpl String.Chars do
-    def to_string(%GraphqlQuery.Fragment{fragment: fragment}) do
+    def to_string(%Fragment{fragment: fragment}) do
       String.trim(fragment)
     end
   end
