@@ -6,10 +6,11 @@ defmodule GraphqlQuery.DocumentTest do
 
   describe "Document.new/2" do
     test "creates document with default options" do
-      query = "query { user { id } }"
+      query = "query MyQuery { user { id } }"
       document = Document.new(query)
 
       assert %Document{
+               name: "MyQuery",
                query: ^query,
                type: :query,
                variables: %{},
@@ -17,8 +18,177 @@ defmodule GraphqlQuery.DocumentTest do
                schema: nil,
                path: nil
              } = document
+    end
 
-      assert is_binary(document.name)
+    test "do not detect name if operation without name + others with names detected" do
+      query = """
+      query {
+        user { id }
+      }
+
+      query Other {
+        post { id }
+      }
+      """
+
+      document = Document.new(query)
+      refute document.name
+    end
+
+    test "do not detect name if multiple named operations" do
+      query = """
+      query Name {
+        user { id }
+      }
+
+      query Other {
+        post { id }
+      }
+      """
+
+      document = Document.new(query)
+      refute document.name
+    end
+
+    test "detects name for single named query" do
+      query = """
+      query GetUser {
+        user { id name }
+      }
+      """
+
+      document = Document.new(query)
+      assert document.name == "GetUser"
+    end
+
+    test "detects name for single named mutation" do
+      mutation = """
+      mutation CreateUser {
+        createUser(input: {name: "John"}) {
+          id name
+        }
+      }
+      """
+
+      document = Document.new(mutation)
+      assert document.name == "CreateUser"
+    end
+
+    test "detects name for single named subscription" do
+      subscription = """
+      subscription UserUpdates {
+        userUpdated {
+          id name
+        }
+      }
+      """
+
+      document = Document.new(subscription)
+      assert document.name == "UserUpdates"
+    end
+
+    test "do not detect name with mixed operation types" do
+      mixed_operations = """
+      query GetUser {
+        user { id }
+      }
+
+      mutation CreateUser {
+        createUser(input: {name: "John"}) {
+          id
+        }
+      }
+      """
+
+      document = Document.new(mixed_operations)
+      refute document.name
+    end
+
+    test "do not detect name with query and subscription" do
+      mixed_operations = """
+      query GetUser {
+        user { id }
+      }
+
+      subscription UserUpdates {
+        userUpdated { id }
+      }
+      """
+
+      document = Document.new(mixed_operations)
+      refute document.name
+    end
+
+    test "do not detect name with mutation and subscription" do
+      mixed_operations = """
+      mutation CreateUser {
+        createUser(input: {name: "John"}) { id }
+      }
+
+      subscription UserUpdates {
+        userUpdated { id }
+      }
+      """
+
+      document = Document.new(mixed_operations)
+      refute document.name
+    end
+
+    test "do not detect name with all three operation types" do
+      mixed_operations = """
+      query GetUser {
+        user { id }
+      }
+
+      mutation CreateUser {
+        createUser(input: {name: "John"}) { id }
+      }
+
+      subscription UserUpdates {
+        userUpdated { id }
+      }
+      """
+
+      document = Document.new(mixed_operations)
+      refute document.name
+    end
+
+    test "do not detect name with multiple mutations" do
+      multiple_mutations = """
+      mutation CreateUser {
+        createUser(input: {name: "John"}) {
+          id
+        }
+      }
+
+      mutation UpdateUser {
+        updateUser(id: "1", input: {name: "Jane"}) {
+          id name
+        }
+      }
+      """
+
+      document = Document.new(multiple_mutations)
+      refute document.name
+    end
+
+    test "do not detect name with multiple subscriptions" do
+      multiple_subscriptions = """
+      subscription UserCreated {
+        userCreated {
+          id name
+        }
+      }
+
+      subscription UserUpdated {
+        userUpdated {
+          id name
+        }
+      }
+      """
+
+      document = Document.new(multiple_subscriptions)
+      refute document.name
     end
 
     test "creates document with custom options" do
@@ -64,7 +234,7 @@ defmodule GraphqlQuery.DocumentTest do
       doc1 = Document.new(query1)
       doc2 = Document.new(query2)
 
-      assert doc1.name != doc2.name
+      assert doc1.document_info.signature != doc2.document_info.signature
     end
   end
 
@@ -243,13 +413,27 @@ defmodule GraphqlQuery.DocumentTest do
 
   describe "Inspect protocol" do
     test "provides readable inspection of document" do
+      fragment = Document.new("fragment UserFields on User { id name }", type: :fragment)
       query = "query GetUser { user { id } }"
-      document = Document.new(query, schema: MySchema)
+      path = "my_query.gql"
+
+      document =
+        Document.new(query, schema: MySchema, path: path)
+        |> Document.add_variable(:id, "123")
+        |> Document.add_fragment(fragment)
 
       inspected = inspect(document)
 
-      assert inspected ==
-               "%GraphqlQuery.Document{name: \"44106063\", query: \"query GetUser { user { id } }\", variables: %{}, fragments: [], schema: MySchema, path: nil, type: :query, document_info: nil}"
+      assert inspected =~ "%GraphqlQuery.Document{"
+      assert inspected =~ "name: \"GetUser\""
+      assert inspected =~ "query: #{inspect(query)}"
+      assert inspected =~ "variables: %{id: \"123\"}"
+      assert inspected =~ "fragments: [%GraphqlQuery.Fragment{"
+      assert inspected =~ "schema: MySchema"
+      assert inspected =~ "path: #{inspect(path)}"
+      assert inspected =~ "type: :query"
+      assert inspected =~ "document_info: %GraphqlQuery.DocumentInfo{"
+      assert inspected =~ "ignore?: false"
     end
 
     test "handles nil name in inspection" do

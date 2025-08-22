@@ -53,22 +53,8 @@ defmodule GraphqlQuery.Parser do
       # Returns: %{message: "[GraphqlQuery] Validation error: Unused variable", location: [...]}
 
   """
-  def format_error(error, warn_location, prefix) do
-    error_location =
-      case error.locations do
-        [] -> %{line: 0, column: 0}
-        [location | _] -> location
-      end
-
-    warn_line = warn_location[:line] || 0
-    warn_column = warn_location[:column] || 0
-
-    new_location = [
-      line: warn_line + error_location.line,
-      column: warn_column + error_location.column
-    ]
-
-    location = Keyword.merge(warn_location, new_location)
+  def format_error(%GraphqlQuery.ValidationError{} = error, warn_location, prefix) do
+    location = error_location(error, warn_location)
 
     file_path = warn_location[:file] || "unknown"
     error_prefix = error_prefix(prefix, location, file_path)
@@ -76,6 +62,34 @@ defmodule GraphqlQuery.Parser do
     msg = "[GraphqlQuery] #{error_prefix} #{error.message}"
 
     %{message: msg, location: location}
+  end
+
+  def format_error(error, location, prefix) when is_binary(error) do
+    file_path = location[:file] || "unknown"
+    error_prefix = error_prefix(prefix, location, file_path)
+
+    "[GraphqlQuery] #{error_prefix} #{error}"
+  end
+
+  defp error_location(error, warn_location) do
+    error_location =
+      case error.locations do
+        [] -> %{line: 0, column: 0}
+        [location | _] -> location
+      end
+
+    warn_line = if line = warn_location[:line], do: line + 1, else: 0
+    indentation = warn_location[:indentation] || 0
+
+    # warn_location[:column] || 0
+    warn_column = indentation
+
+    new_location = [
+      line: warn_line + error_location.line,
+      column: warn_column + error_location.column
+    ]
+
+    Keyword.merge(warn_location, new_location)
   end
 
   defp error_prefix(prefix, _loc, _file_path) when is_binary(prefix) do

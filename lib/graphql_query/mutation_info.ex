@@ -6,10 +6,11 @@ defmodule GraphqlQuery.MutationInfo do
   optional operation name and a list of fragments used within the mutation.
   """
 
-  defstruct [:name, :fragments]
+  defstruct [:name, :fragments, :location]
 
   @type t :: %__MODULE__{
           name: String.t() | nil,
-          fragments: [String.t()]
+          fragments: [String.t()],
+          location: GraphqlQuery.Location.t() | nil
         }
 end

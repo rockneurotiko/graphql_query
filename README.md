@@ -231,7 +231,7 @@ query GetUser($id: ID!) {
 
 Example project structure:
 
-```text
+```
 priv/
 ├── graphql/
 |   ├── schema.graphql
@@ -630,10 +630,11 @@ Check the documentation of these modules if you want to know more about the manu
 
 ### Planned
 
-- [ ] Extract documents and fragment names
-- [ ] Fix line reporting on expanded queries
 - [ ] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
 - [ ] Optional compile-time validation via Mix task
+- [ ] Do we need `gql`? It might lead to bad habits
+- [ ] If we want `gql`, fix line reporting on expanded queries
+
 
 ### Done
 
@@ -644,6 +645,7 @@ Check the documentation of these modules if you want to know more about the manu
 - [x] Schema parsing and validation
 - [x] Custom Document and Fragment representation, with implementation for to_string and json with JSON and Jason
 - [x] Allow to set fragments in individual queries or per-module
+- [x] Extract document info, and calculate if possible name and signature
 
 ---
 

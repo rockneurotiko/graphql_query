@@ -6,10 +6,11 @@ defmodule GraphqlQuery.FragmentInfo do
   the fragment name and a list of other fragments it depends on.
   """
 
-  defstruct [:name, :fragments]
+  defstruct [:name, :fragments, :location]
 
   @type t :: %__MODULE__{
           name: String.t(),
-          fragments: [String.t()]
+          fragments: [String.t()],
+          location: GraphqlQuery.Location.t() | nil
         }
 end

@@ -66,6 +66,7 @@ defmodule GraphqlQuery.MixProject do
           GraphqlQuery.MacroOptions,
           GraphqlQuery.ValidationError,
           GraphqlQuery.Location,
+          GraphqlQuery.Logger,
           GraphqlQuery.Parser,
           GraphqlQuery.Signature
         ],
