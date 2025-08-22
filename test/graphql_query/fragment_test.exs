@@ -72,7 +72,8 @@ defmodule GraphqlQuery.FragmentTest do
 
       fragment = Fragment.from_query(document)
 
-      assert fragment.name == document.name
+      refute document.name
+      assert "UserProfile" == fragment.name
       assert fragment.path == "/graphql/fragments/user.gql"
       assert fragment.schema == UserSchema
     end
@@ -83,9 +84,11 @@ defmodule GraphqlQuery.FragmentTest do
 
       fragment = Fragment.from_query(document)
 
-      assert fragment.path == nil
-      assert fragment.schema == nil
-      assert fragment.name == document.name
+      refute document.name
+      refute fragment.path
+      refute fragment.schema
+
+      assert fragment.name == "SimpleFragment"
       assert fragment.fragment == query
     end
   end
@@ -244,13 +247,13 @@ defmodule GraphqlQuery.FragmentTest do
       assert fragment1.fragment == fragment2.fragment
     end
 
-    test "fragments with different content have different names" do
+    test "fragments with different content have different signature but same name" do
       fragment1 = Document.new("fragment UserFields on User { id name }", type: :fragment)
       fragment2 = Document.new("fragment UserFields on User { id email }", type: :fragment)
 
-      # Different content should generate different hash-based names
-      assert fragment1.name != fragment2.name
+      assert fragment1.name == fragment2.name
       assert fragment1.fragment != fragment2.fragment
+      assert fragment1.document_info.signature != fragment2.document_info.signature
     end
   end
 

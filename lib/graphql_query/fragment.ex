@@ -5,14 +5,15 @@ defmodule GraphqlQuery.Fragment do
 
   alias GraphqlQuery.{Document, DocumentInfo, Fragment, Signature}
 
-  defstruct [:name, :fragment, :path, :schema, :document_info]
+  defstruct [:name, :fragment, :path, :schema, :document_info, :ignore?]
 
   @type t :: %__MODULE__{
           name: String.t(),
           fragment: String.t(),
           path: String.t() | nil,
           schema: module() | nil,
-          document_info: DocumentInfo.t() | nil
+          document_info: DocumentInfo.t() | nil,
+          ignore?: boolean()
         }
 
   @doc """
@@ -34,24 +35,45 @@ defmodule GraphqlQuery.Fragment do
   def from_query(%Document{} = document) do
     query = to_string(document)
 
-    %__MODULE__{
+    fragment = %__MODULE__{
       name: document.name,
       fragment: to_string(query),
       path: document.path,
-      schema: document.schema
+      schema: document.schema,
+      ignore?: document.ignore?
     }
+
+    Document.calculate_info(fragment)
   end
 
   @spec set_document_info(t(), DocumentInfo.t() | nil) :: t()
   def set_document_info(%__MODULE__{} = fragment, %DocumentInfo{} = document_info) do
     # If more than one fragments, warning?
+    name = extract_name(document_info)
     signature = Signature.signature(fragment)
     document_info = DocumentInfo.add_signature(document_info, signature)
-    %{fragment | document_info: document_info}
+    %{fragment | name: name, document_info: document_info}
   end
 
   def set_document_info(%__MODULE__{} = fragment, _) do
-    %{fragment | document_info: nil}
+    %{fragment | name: nil, document_info: nil}
+  end
+
+  defp extract_name(%{fragments: fragments}) do
+    case fragments do
+      [fragment] ->
+        fragment.name
+
+      [fragment | _] ->
+        # credo:disable-for-next-line
+        # TODO: Log warning?
+        fragment.name
+
+      _fragments ->
+        # credo:disable-for-next-line
+        # TODO: Log warning?
+        nil
+    end
   end
 
   defimpl String.Chars do

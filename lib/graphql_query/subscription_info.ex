@@ -6,10 +6,11 @@ defmodule GraphqlQuery.SubscriptionInfo do
   subscription name and a list of fragments used within the subscription operation.
   """
 
-  defstruct [:name, :fragments]
+  defstruct [:name, :fragments, :location]
 
   @type t :: %__MODULE__{
           name: String.t(),
-          fragments: [String.t()]
+          fragments: [String.t()],
+          location: GraphqlQuery.Location.t() | nil
         }
 end

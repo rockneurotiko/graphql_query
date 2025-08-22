@@ -19,6 +19,7 @@ pub struct ValidationError {
 pub struct Location {
     pub line: usize,
     pub column: usize,
+    pub indentation: usize
 }
 
 #[derive(Debug, Clone, rustler::NifStruct)]
@@ -26,6 +27,7 @@ pub struct Location {
 pub struct QueryInfo {
     pub name: Option<String>,
     pub fragments: Vec<String>,
+    pub location: Option<Location>,
 }
 
 #[derive(Debug, Clone, rustler::NifStruct)]
@@ -33,6 +35,7 @@ pub struct QueryInfo {
 pub struct MutationInfo {
     pub name: Option<String>,
     pub fragments: Vec<String>,
+    pub location: Option<Location>,
 }
 
 #[derive(Debug, Clone, rustler::NifStruct)]
@@ -40,6 +43,7 @@ pub struct MutationInfo {
 pub struct FragmentInfo {
     pub name: String,
     pub fragments: Vec<String>,
+    pub location: Option<Location>,
 }
 
 #[derive(Debug, Clone, rustler::NifStruct)]
@@ -47,6 +51,7 @@ pub struct FragmentInfo {
 pub struct SubscriptionInfo {
     pub name: Option<String>,
     pub fragments: Vec<String>,
+    pub location: Option<Location>,
 }
 
 #[derive(Debug, Clone, rustler::NifStruct)]
@@ -89,6 +94,7 @@ fn diagnostics_to_validation_errors(diagnostics: DiagnosticList) -> Vec<Validati
                 .map(|loc| Location {
                     line: loc.line,
                     column: loc.column,
+                    indentation: 0
                 })
                 .collect();
 
@@ -107,7 +113,7 @@ fn extract_fragments_from_selection_set(selections: &[Selection], fragments: &mu
                 extract_fragments_from_selection_set(&inline_fragment.selection_set, fragments);
             }
             Selection::FragmentSpread(fragment_spread) => {
-                fragments.insert(fragment_spread.fragment_name.as_str().to_string());
+                fragments.insert(fragment_spread.fragment_name.to_string());
             }
         }
     }
@@ -117,9 +123,7 @@ fn extract_operation_info(document: &Document) -> DocumentInfo {
     let mut queries = Vec::new();
     let mut mutations = Vec::new();
     let mut subscriptions = Vec::new();
-
-    // Extract fragment information with dependencies for top-level fragments
-    let fragments = extract_fragment_info(document);
+    let mut fragments = Vec::new();
 
     for definition in &document.definitions {
         match definition {
@@ -127,32 +131,60 @@ fn extract_operation_info(document: &Document) -> DocumentInfo {
                 let mut used_fragments = HashSet::new();
                 extract_fragments_from_selection_set(&op.selection_set, &mut used_fragments);
 
-                let operation_name = op.name.as_ref().map(|n| n.as_str().to_string());
+                let operation_name = op.name.as_ref().map(|n| n.to_string());
                 let used_fragments_vec: Vec<String> = used_fragments.into_iter().collect();
+                let location = definition
+                    .location()
+                    .and_then(|loc| loc.line_column(&document.sources))
+                    .map(|location| Location {
+                        line: location.line,
+                        column: location.column,
+                        indentation: 0
+                    });
 
                 match op.operation_type {
                     apollo_compiler::ast::OperationType::Query => {
                         queries.push(QueryInfo {
                             name: operation_name,
                             fragments: used_fragments_vec,
+                            location,
                         });
                     }
                     apollo_compiler::ast::OperationType::Mutation => {
                         mutations.push(MutationInfo {
                             name: operation_name,
                             fragments: used_fragments_vec,
+                            location,
                         });
                     }
                     apollo_compiler::ast::OperationType::Subscription => {
                         subscriptions.push(SubscriptionInfo {
                             name: operation_name,
                             fragments: used_fragments_vec,
+                            location,
                         });
                     }
                 }
             }
             // Fragment information is already handled by extract_fragment_info
-            Definition::FragmentDefinition(_) => {}
+            Definition::FragmentDefinition(frag) => {
+                let mut used_fragments = HashSet::new();
+                extract_fragments_from_selection_set(&frag.selection_set, &mut used_fragments);
+                let location = definition
+                    .location()
+                    .and_then(|loc| loc.line_column(&document.sources))
+                    .map(|location| Location {
+                        line: location.line,
+                        column: location.column,
+                        indentation: 0
+                    });
+
+                fragments.push(FragmentInfo {
+                    name: frag.name.to_string(),
+                    fragments: used_fragments.into_iter().collect(),
+                    location,
+                });
+            }
             _ => {}
         }
     }
@@ -164,24 +196,6 @@ fn extract_operation_info(document: &Document) -> DocumentInfo {
         subscriptions,
         signature: None,
     }
-}
-
-fn extract_fragment_info(document: &Document) -> Vec<FragmentInfo> {
-    let mut fragment_infos = Vec::new();
-
-    for definition in &document.definitions {
-        if let Definition::FragmentDefinition(frag) = definition {
-            let mut used_fragments = HashSet::new();
-            extract_fragments_from_selection_set(&frag.selection_set, &mut used_fragments);
-
-            fragment_infos.push(FragmentInfo {
-                name: frag.name.as_str().to_string(),
-                fragments: used_fragments.into_iter().collect(),
-            });
-        }
-    }
-
-    fragment_infos
 }
 
 #[rustler::nif]

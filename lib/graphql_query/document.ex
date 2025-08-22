@@ -58,9 +58,20 @@ defmodule GraphqlQuery.Document do
       %{"query" => "query User(userId: ID!) { user(id: $userId) { ...UserFragment } }\\nfragment UserFragment on User { id name }", "variables" => %{"userId" => 1}}
   """
 
-  alias GraphqlQuery.{DocumentInfo, Fragment, Signature}
+  alias GraphqlQuery.{DocumentInfo, Fragment, Signature, Validator}
 
-  defstruct [:name, :query, :variables, :fragments, :schema, :path, :type, :document_info]
+  defstruct [
+    :name,
+    :query,
+    :variables,
+    :fragments,
+    :schema,
+    :path,
+    :type,
+    :document_info,
+    :ignore?,
+    :location
+  ]
 
   @type t :: %__MODULE__{
           name: String.t() | nil,
@@ -70,44 +81,62 @@ defmodule GraphqlQuery.Document do
           schema: module() | nil,
           path: String.t() | nil,
           type: :query | :schema,
-          document_info: DocumentInfo.t() | nil
+          document_info: DocumentInfo.t() | nil,
+          ignore?: boolean(),
+          location: GraphqlQuery.Location.t() | nil
         }
+
+  @type document :: t() | Fragment.t()
 
   @type new_options :: [
           {:path, String.t() | nil},
           {:type, :query | :schema | :fragment},
           {:schema, module() | nil},
           {:fragments, list(Fragment.t())},
-          {:name, String.t() | nil}
+          {:name, String.t() | nil},
+          {:ignore?, boolean() | nil},
+          {:location, GraphqlQuery.Location.t() | nil}
         ]
-  @spec new(String.t(), new_options()) :: t() | Fragment.t()
+  @spec new(String.t(), new_options()) :: document()
   @doc "Create a new GraphQL document or fragment from a document string and options."
   def new(query, opts \\ []) do
     path = Keyword.get(opts, :path, nil)
     type = Keyword.get(opts, :type, :query)
     schema = Keyword.get(opts, :schema, nil)
     fragments = Keyword.get(opts, :fragments, [])
+    ignore? = Keyword.get(opts, :ignore?, false)
+    location = Keyword.get(opts, :location, nil)
 
-    # credo:disable-for-next-line
-    # TODO: Parsing the query shall return the name of the query/fragment
-    name = Keyword.get(opts, :name, Signature.signature(query))
+    # name = Keyword.get(opts, :name, Signature.signature(query))
 
     document =
       %__MODULE__{
-        name: name,
+        name: nil,
         query: query,
         variables: %{},
         fragments: fragments |> only_fragments() |> unique_fragments(),
         schema: schema,
         path: path,
-        type: type
+        type: type,
+        ignore?: ignore?,
+        location: location
       }
 
     if type == :fragment do
       Fragment.from_query(document)
     else
-      document
+      calculate_info(document)
     end
+  end
+
+  @doc "Set the name of the document"
+  @spec set_name(t(), String.t() | nil) :: t()
+  def set_name(document, name) when is_binary(name) do
+    %{document | name: name}
+  end
+
+  def set_name(document, _) do
+    %{document | name: nil}
   end
 
   @doc "Set schema to the document"
@@ -186,12 +215,39 @@ defmodule GraphqlQuery.Document do
     end)
   end
 
-  @spec set_document_info(t() | Fragment.t(), DocumentInfo.t() | nil) :: t()
+  @spec calculate_info(document()) :: document()
+  def calculate_info(document) do
+    if needs_document_info?(document) do
+      do_calculate_info(document)
+    else
+      document
+    end
+  end
+
+  defp do_calculate_info(document) do
+    case Validator.document_information(document) do
+      {:ok, document_info} ->
+        set_document_info(document, document_info)
+
+      {:error, _errors} ->
+        set_document_info(document, nil)
+    end
+  end
+
+  defp needs_document_info?(%{document_info: nil}), do: true
+  defp needs_document_info?(%{document_info: %{signature: nil}}), do: true
+
+  defp needs_document_info?(%{document_info: %{signature: signature}} = document) do
+    Signature.signature(document) != signature
+  end
+
+  @spec set_document_info(document(), DocumentInfo.t() | nil) :: t()
   def set_document_info(%__MODULE__{} = document, %DocumentInfo{} = document_info) do
+    name = maybe_extract_unique_name(document_info) || document.name
     signature = Signature.signature(document)
     document_info = DocumentInfo.add_signature(document_info, signature)
 
-    %{document | document_info: document_info}
+    %{document | name: name, document_info: document_info}
   end
 
   def set_document_info(%Fragment{} = document, document_info) do
@@ -200,14 +256,48 @@ defmodule GraphqlQuery.Document do
 
   def set_document_info(document, _), do: %{document | document_info: nil}
 
+  defp maybe_extract_unique_name(%{queries: [query], mutations: [], subscriptions: []}) do
+    query.name
+  end
+
+  defp maybe_extract_unique_name(%{queries: [], mutations: [mutation], subscriptions: []}) do
+    mutation.name
+  end
+
+  defp maybe_extract_unique_name(%{queries: [], mutations: [], subscriptions: [subscription]}) do
+    subscription.name
+  end
+
+  defp maybe_extract_unique_name(_), do: nil
+
   @doc "Format a query with its fragments into a single string."
   @spec format_query_with_fragments(t()) :: String.t()
-  def format_query_with_fragments(%__MODULE__{query: query, fragments: fragments}) do
-    fragments_string = fragments |> Enum.map_join("\n", &Kernel.to_string/1) |> String.trim()
+  def format_query_with_fragments(%__MODULE__{query: query, fragments: fragments} = document) do
+    fragments_string =
+      fragments
+      |> Enum.filter(&used_fragment?(&1, document))
+      |> Enum.map_join("\n", &Kernel.to_string/1)
+      |> String.trim()
 
     [String.trim(query), fragments_string]
     |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n")
+  end
+
+  defp used_fragment?(_fragment, %{document_info: nil}), do: true
+
+  defp used_fragment?(fragment, %{document_info: document_info}) do
+    all_parts =
+      document_info.queries ++
+        document_info.mutations ++
+        document_info.subscriptions ++
+        document_info.fragments
+
+    Enum.any?(all_parts, &fragment_used_in_part?(&1, fragment))
+  end
+
+  defp fragment_used_in_part?(%{fragments: used_fragments}, %{name: fragment_name}) do
+    fragment_name in used_fragments
   end
 
   if Code.ensure_loaded?(JSON) do
