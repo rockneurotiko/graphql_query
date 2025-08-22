@@ -248,10 +248,8 @@ defmodule GraphqlQuery.DocumentTest do
 
       inspected = inspect(document)
 
-      assert inspected =~ "#GraphqlQuery.Document<"
-      assert inspected =~ "query: \"query GetUser { user { id } }\""
-      assert inspected =~ "variables: %{}"
-      assert inspected =~ "fragments: []"
+      assert inspected ==
+               "%GraphqlQuery.Document{name: \"44106063\", query: \"query GetUser { user { id } }\", variables: %{}, fragments: [], schema: MySchema, path: nil, type: :query, document_info: nil}"
     end
 
     test "handles nil name in inspection" do

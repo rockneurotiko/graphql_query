@@ -639,17 +639,17 @@ defmodule GraphqlQuery do
 
       true ->
         case Validator.validate(query) do
-          :ok ->
-            :ok
+          {:ok, document} ->
+            Macro.escape(document)
 
           {:error, errors} ->
             prefix =
               "Validation errors, if you want to ignore them use the i modifier: ~G\"{}\"#{opts}i\n"
 
             print_warnings(errors, warn_location, prefix)
-        end
 
-        Macro.escape(query)
+            Macro.escape(query)
+        end
     end
   end
 
@@ -701,7 +701,7 @@ defmodule GraphqlQuery do
   end
 
   defp expand_fragments!(fragments, caller) do
-    Enum.map(fragments, &expand_fragment!(&1, caller))
+    fragments |> Enum.map(&expand_fragment!(&1, caller)) |> Enum.reject(&is_nil/1)
   end
 
   # credo:disable-for-next-line
@@ -849,8 +849,8 @@ defmodule GraphqlQuery do
       query = Document.new(calculated_query, unquote(query_opts))
 
       case Validator.validate(query) do
-        :ok ->
-          :ok
+        {:ok, document} ->
+          document
 
         {:error, errors} ->
           Enum.each(errors, fn error ->
@@ -858,15 +858,15 @@ defmodule GraphqlQuery do
 
             Logger.warning(error.message, error.location)
           end)
-      end
 
-      query
+          query
+      end
     end
   end
 
   defp do_validate(document, warn_location) do
     case Validator.validate(document) do
-      :ok ->
+      {:ok, document} ->
         document
 
       {:error, errors} ->
@@ -972,12 +972,10 @@ defmodule GraphqlQuery do
   defp get_option(opts, key, default, caller) do
     module_attribute_key = :"__graphql_query__#{key}"
 
-    case Keyword.get(opts, key) do
-      nil ->
-        get_module_attribute(caller.module, module_attribute_key, default)
-
-      value ->
-        value
+    if Keyword.has_key?(opts, key) do
+      opts[key]
+    else
+      get_module_attribute(caller.module, module_attribute_key, default)
     end
 
     # case get_in(opts, [Access.key(key)]) do

@@ -1,8 +1,9 @@
-use apollo_compiler::ast::Document;
+use apollo_compiler::ast::{Definition, Document, Selection};
 use apollo_compiler::validation::DiagnosticList;
 use apollo_compiler::validation::Valid;
 use apollo_compiler::ExecutableDocument;
 use apollo_compiler::Schema;
+use std::collections::HashSet;
 
 use regex::Regex;
 
@@ -18,6 +19,44 @@ pub struct ValidationError {
 pub struct Location {
     pub line: usize,
     pub column: usize,
+}
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.QueryInfo"]
+pub struct QueryInfo {
+    pub name: Option<String>,
+    pub fragments: Vec<String>,
+}
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.MutationInfo"]
+pub struct MutationInfo {
+    pub name: Option<String>,
+    pub fragments: Vec<String>,
+}
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.FragmentInfo"]
+pub struct FragmentInfo {
+    pub name: String,
+    pub fragments: Vec<String>,
+}
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.SubscriptionInfo"]
+pub struct SubscriptionInfo {
+    pub name: Option<String>,
+    pub fragments: Vec<String>,
+}
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.DocumentInfo"]
+pub struct DocumentInfo {
+    pub queries: Vec<QueryInfo>,
+    pub mutations: Vec<MutationInfo>,
+    pub fragments: Vec<FragmentInfo>,
+    pub subscriptions: Vec<SubscriptionInfo>,
+    pub signature: Option<String>,
 }
 
 mod atoms {
@@ -56,6 +95,101 @@ fn diagnostics_to_validation_errors(diagnostics: DiagnosticList) -> Vec<Validati
             ValidationError { message, locations }
         })
         .collect()
+}
+
+fn extract_fragments_from_selection_set(selections: &[Selection], fragments: &mut HashSet<String>) {
+    for selection in selections {
+        match selection {
+            Selection::Field(field) => {
+                extract_fragments_from_selection_set(&field.selection_set, fragments);
+            }
+            Selection::InlineFragment(inline_fragment) => {
+                extract_fragments_from_selection_set(&inline_fragment.selection_set, fragments);
+            }
+            Selection::FragmentSpread(fragment_spread) => {
+                fragments.insert(fragment_spread.fragment_name.as_str().to_string());
+            }
+        }
+    }
+}
+
+fn extract_operation_info(document: &Document) -> DocumentInfo {
+    let mut queries = Vec::new();
+    let mut mutations = Vec::new();
+    let mut subscriptions = Vec::new();
+
+    // Extract fragment information with dependencies for top-level fragments
+    let fragments = extract_fragment_info(document);
+
+    for definition in &document.definitions {
+        match definition {
+            Definition::OperationDefinition(op) => {
+                let mut used_fragments = HashSet::new();
+                extract_fragments_from_selection_set(&op.selection_set, &mut used_fragments);
+
+                let operation_name = op.name.as_ref().map(|n| n.as_str().to_string());
+                let used_fragments_vec: Vec<String> = used_fragments.into_iter().collect();
+
+                match op.operation_type {
+                    apollo_compiler::ast::OperationType::Query => {
+                        queries.push(QueryInfo {
+                            name: operation_name,
+                            fragments: used_fragments_vec,
+                        });
+                    }
+                    apollo_compiler::ast::OperationType::Mutation => {
+                        mutations.push(MutationInfo {
+                            name: operation_name,
+                            fragments: used_fragments_vec,
+                        });
+                    }
+                    apollo_compiler::ast::OperationType::Subscription => {
+                        subscriptions.push(SubscriptionInfo {
+                            name: operation_name,
+                            fragments: used_fragments_vec,
+                        });
+                    }
+                }
+            }
+            // Fragment information is already handled by extract_fragment_info
+            Definition::FragmentDefinition(_) => {}
+            _ => {}
+        }
+    }
+
+    DocumentInfo {
+        queries,
+        mutations,
+        fragments,
+        subscriptions,
+        signature: None,
+    }
+}
+
+fn extract_fragment_info(document: &Document) -> Vec<FragmentInfo> {
+    let mut fragment_infos = Vec::new();
+
+    for definition in &document.definitions {
+        if let Definition::FragmentDefinition(frag) = definition {
+            let mut used_fragments = HashSet::new();
+            extract_fragments_from_selection_set(&frag.selection_set, &mut used_fragments);
+
+            fragment_infos.push(FragmentInfo {
+                name: frag.name.as_str().to_string(),
+                fragments: used_fragments.into_iter().collect(),
+            });
+        }
+    }
+
+    fragment_infos
+}
+
+#[rustler::nif]
+fn document_information(
+    document: String,
+    path: String,
+) -> Result<DocumentInfo, Vec<ValidationError>> {
+    parse_query(&document, &path).map(|doc| extract_operation_info(&doc))
 }
 
 fn validate_query_without_schema(
@@ -112,7 +246,7 @@ fn validate_fragment(
     schema: Option<String>,
     schema_path: Option<String>,
 ) -> Result<rustler::Atom, Vec<ValidationError>> {
-    let result = match schema {
+    let validation_result = match schema {
         Some(schema) => {
             let schema_path = schema_path.unwrap_or_else(|| "schema.graphql".to_string());
             validate_query_with_schema(schema, schema_path, fragment, path)
@@ -122,8 +256,8 @@ fn validate_fragment(
 
     let unused_fragment_regex = Regex::new(r"fragment `.*` must be used in an operation").unwrap();
 
-    match result {
-        Ok(atom) => Ok(atom),
+    match validation_result {
+        Ok(_) => Ok(atoms::ok()),
         Err(errors) => {
             let filtered_errors = errors
                 .into_iter()

@@ -8,7 +8,7 @@ defmodule GraphqlQuery.ValidatorTest do
   describe "validate/1" do
     test "uses default document name on errors" do
       # Test that the default document name is used in error messages
-      assert {:error, [error]} = Validator.validate("query T() { field }")
+      assert {:error, [error]} = "query T() { field }" |> Document.new() |> Validator.validate()
       assert error.message =~ "expected a Variable Definition"
       assert [%{line: 1, column: 9}] = error.locations
     end
@@ -23,19 +23,24 @@ defmodule GraphqlQuery.ValidatorTest do
     end
 
     test "validates correct GraphQL queries" do
-      assert Validator.validate("query TestQuery($a: String!) { user(id: $a) { id name } }") ==
-               :ok
+      assert {:ok, document} =
+               "query TestQuery($a: String!) { user(id: $a) { id name } }"
+               |> Document.new()
+               |> Validator.validate()
+
+      assert document.document_info
+      assert document.document_info.signature
     end
 
     test "validates GraphQL queries with syntax errors" do
-      result = Validator.validate("query T { field\n? }")
+      result = "query T { field\n? }" |> Document.new() |> Validator.validate()
       assert {:error, [error]} = result
       assert error.message =~ "syntax error: Unexpected character \"?\""
     end
 
     test "validates GraphQL queries with unused variables" do
       # Query with unused variable should return validation error
-      result = Validator.validate("query T($a: String) { field }")
+      result = "query T($a: String) { field }" |> Document.new() |> Validator.validate()
       assert {:error, [error]} = result
       assert error.message =~ "unused variable: `$a`"
     end
@@ -46,9 +51,10 @@ defmodule GraphqlQuery.ValidatorTest do
       query = "query TestQuery($id: ID!) { user(id: $id) { id name email } }"
       document = Document.new(query)
 
-      result = Validator.validate(document)
+      assert {:ok, result} = Validator.validate(document)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
 
     test "validates invalid Document with syntax errors" do
@@ -93,9 +99,10 @@ defmodule GraphqlQuery.ValidatorTest do
       query = "query GetUser { user { id } }"
       document = Document.new(query, type: :query)
 
-      result = Validator.validate(document)
+      {:ok, result} = Validator.validate(document)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
 
     test "validates Document with fragments" do
@@ -104,10 +111,10 @@ defmodule GraphqlQuery.ValidatorTest do
       fragment = Document.new("fragment UserFields on User { id name }", type: :fragment)
       document_with_fragments = Document.add_fragment(document, fragment)
 
-      result = Validator.validate(document_with_fragments)
+      assert {:ok, result} = Validator.validate(document_with_fragments)
 
-      # The validation should include the fragments in the query string
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
   end
 
@@ -116,9 +123,10 @@ defmodule GraphqlQuery.ValidatorTest do
       fragment_query = "fragment UserFields on User { id name email }"
       fragment = Document.new(fragment_query, type: :fragment)
 
-      result = Validator.validate(fragment)
+      assert {:ok, result} = Validator.validate(fragment)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
 
     test "validates invalid Fragment with syntax errors" do
@@ -163,9 +171,10 @@ defmodule GraphqlQuery.ValidatorTest do
       fragment_query = "fragment UserBasicFields on User { id name }"
       fragment = Document.new(fragment_query, type: :fragment)
 
-      result = Validator.validate(fragment)
+      assert {:ok, result} = Validator.validate(fragment)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
   end
 
@@ -178,9 +187,10 @@ defmodule GraphqlQuery.ValidatorTest do
       document = Document.new(query, schema: nil)
 
       # Without a schema, this will validate syntax only
-      result = Validator.validate(document)
+      {:ok, result} = Validator.validate(document)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
 
     test "validates Fragment with nil schema (no schema validation)" do
@@ -188,9 +198,10 @@ defmodule GraphqlQuery.ValidatorTest do
       fragment = Document.new(fragment_query, type: :fragment, schema: nil)
 
       # Without a schema, this will validate syntax only
-      result = Validator.validate(fragment)
+      {:ok, result} = Validator.validate(fragment)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
   end
 
@@ -218,9 +229,10 @@ defmodule GraphqlQuery.ValidatorTest do
       """
 
       document = Document.new(query)
-      result = Validator.validate(document)
+      assert {:ok, result} = Validator.validate(document)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
 
     test "handles Fragment with complex field selections" do
@@ -249,17 +261,17 @@ defmodule GraphqlQuery.ValidatorTest do
       """
 
       fragment = Document.new(fragment_query, type: :fragment)
-      result = Validator.validate(fragment)
+      assert {:ok, result} = Validator.validate(fragment)
 
-      assert result == :ok
+      assert result.document_info
+      assert result.document_info.signature
     end
 
     test "handles empty Document gracefully" do
       document = Document.new("")
 
-      result = Validator.validate(document)
+      assert {:error, [error]} = Validator.validate(document)
 
-      assert {:error, [error]} = result
       assert error.message =~ "syntax error"
     end
 

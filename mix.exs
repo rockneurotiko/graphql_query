@@ -63,13 +63,21 @@ defmodule GraphqlQuery.MixProject do
       groups_for_modules: [
         GraphqlQuery: [
           GraphqlQuery,
-          GraphqlQuery.Schema,
-          GraphqlQuery.Document,
-          GraphqlQuery.Fragment,
           GraphqlQuery.MacroOptions,
           GraphqlQuery.ValidationError,
           GraphqlQuery.Location,
-          GraphqlQuery.Parser
+          GraphqlQuery.Parser,
+          GraphqlQuery.Signature
+        ],
+        "GraphqlQuery Entities": [
+          GraphqlQuery.Schema,
+          GraphqlQuery.Document,
+          GrapqhqlQuery.DocumentInfo,
+          GraphqlQuery.QueryInfo,
+          GraphqlQuery.Fragment,
+          GraphqlQuery.FragmentInfo,
+          GraphqlQuery.MutationInfo,
+          GraphqlQuery.SubscriptionInfo
         ],
         Format: [
           GraphqlQuery.Formatter,

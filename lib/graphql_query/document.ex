@@ -58,9 +58,9 @@ defmodule GraphqlQuery.Document do
       %{"query" => "query User(userId: ID!) { user(id: $userId) { ...UserFragment } }\\nfragment UserFragment on User { id name }", "variables" => %{"userId" => 1}}
   """
 
-  alias GraphqlQuery.Fragment
+  alias GraphqlQuery.{DocumentInfo, Fragment, Signature}
 
-  defstruct [:name, :query, :variables, :fragments, :schema, :path, :type]
+  defstruct [:name, :query, :variables, :fragments, :schema, :path, :type, :document_info]
 
   @type t :: %__MODULE__{
           name: String.t() | nil,
@@ -69,7 +69,8 @@ defmodule GraphqlQuery.Document do
           fragments: list(Fragment.t()),
           schema: module() | nil,
           path: String.t() | nil,
-          type: :query | :schema
+          type: :query | :schema,
+          document_info: DocumentInfo.t() | nil
         }
 
   @type new_options :: [
@@ -89,7 +90,7 @@ defmodule GraphqlQuery.Document do
 
     # credo:disable-for-next-line
     # TODO: Parsing the query shall return the name of the query/fragment
-    name = Keyword.get(opts, :name, signature(query))
+    name = Keyword.get(opts, :name, Signature.signature(query))
 
     document =
       %__MODULE__{
@@ -108,12 +109,6 @@ defmodule GraphqlQuery.Document do
       document
     end
   end
-
-  defp signature(document) when is_binary(document) do
-    document |> :erlang.phash2() |> Integer.to_string()
-  end
-
-  defp signature(_), do: nil
 
   @doc "Set schema to the document"
   @spec set_schema(t(), module()) :: t()
@@ -191,6 +186,20 @@ defmodule GraphqlQuery.Document do
     end)
   end
 
+  @spec set_document_info(t() | Fragment.t(), DocumentInfo.t() | nil) :: t()
+  def set_document_info(%__MODULE__{} = document, %DocumentInfo{} = document_info) do
+    signature = Signature.signature(document)
+    document_info = DocumentInfo.add_signature(document_info, signature)
+
+    %{document | document_info: document_info}
+  end
+
+  def set_document_info(%Fragment{} = document, document_info) do
+    Fragment.set_document_info(document, document_info)
+  end
+
+  def set_document_info(document, _), do: %{document | document_info: nil}
+
   @doc "Format a query with its fragments into a single string."
   @spec format_query_with_fragments(t()) :: String.t()
   def format_query_with_fragments(%__MODULE__{query: query, fragments: fragments}) do
@@ -241,57 +250,57 @@ defmodule GraphqlQuery.Document do
     end
   end
 
-  defimpl Inspect do
-    import Inspect.Algebra
+  # defimpl Inspect do
+  #   import Inspect.Algebra
 
-    if Version.match?(System.version(), ">= 1.19.0-rc.0") do
-      @doc "Inspect a GraphQL query document for debugging purposes."
-      def inspect(gql_query, opts) do
-        {name, opts} = to_doc_with_opts(gql_query.name, opts)
+  #   if Version.match?(System.version(), ">= 1.19.0-rc.0") do
+  #     @doc "Inspect a GraphQL query document for debugging purposes."
+  #     def inspect(gql_query, opts) do
+  #       {name, opts} = to_doc_with_opts(gql_query.name, opts)
 
-        {fragments, opts} = to_doc_with_opts(gql_query.fragments, opts)
-        {query, opts} = to_doc_with_opts(gql_query.query, opts)
-        {schema, opts} = to_doc_with_opts(gql_query.schema, opts)
-        {variables, opts} = to_doc_with_opts(gql_query.variables, opts)
+  #       {fragments, opts} = to_doc_with_opts(gql_query.fragments, opts)
+  #       {query, opts} = to_doc_with_opts(gql_query.query, opts)
+  #       {schema, opts} = to_doc_with_opts(gql_query.schema, opts)
+  #       {variables, opts} = to_doc_with_opts(gql_query.variables, opts)
 
-        {concat([
-           "#GraphqlQuery.Document<name: ",
-           name,
-           ", query: ",
-           query,
-           ", schema: ",
-           schema,
-           ", variables: ",
-           variables,
-           ", fragments: ",
-           fragments,
-           ">"
-         ]), opts}
-      end
-    else
-      @doc "Inspect a GraphQL query document for debugging purposes."
-      def inspect(gql_query, opts) do
-        name =
-          if gql_query.name,
-            do: Inspect.BitString.inspect(gql_query.name, opts),
-            else: Inspect.Atom.inspect(nil, opts)
+  #       {concat([
+  #          "#GraphqlQuery.Document<name: ",
+  #          name,
+  #          ", query: ",
+  #          query,
+  #          ", schema: ",
+  #          schema,
+  #          ", variables: ",
+  #          variables,
+  #          ", fragments: ",
+  #          fragments,
+  #          ">"
+  #        ]), opts}
+  #     end
+  #   else
+  #     @doc "Inspect a GraphQL query document for debugging purposes."
+  #     def inspect(gql_query, opts) do
+  #       name =
+  #         if gql_query.name,
+  #           do: Inspect.BitString.inspect(gql_query.name, opts),
+  #           else: Inspect.Atom.inspect(nil, opts)
 
-        fragments = gql_query.fragments |> Enum.map(&to_string/1)
+  #       fragments = gql_query.fragments |> Enum.map(&to_string/1)
 
-        concat([
-          "#GraphqlQuery.Document<name: ",
-          name,
-          ", query: ",
-          Inspect.BitString.inspect(gql_query.query, opts),
-          ", schema: ",
-          Inspect.Atom.inspect(gql_query.schema, opts),
-          ", variables: ",
-          Inspect.Map.inspect(gql_query.variables, opts),
-          ", fragments: ",
-          Inspect.List.inspect(fragments, opts),
-          ">"
-        ])
-      end
-    end
-  end
+  #       concat([
+  #         "#GraphqlQuery.Document<name: ",
+  #         name,
+  #         ", query: ",
+  #         Inspect.BitString.inspect(gql_query.query, opts),
+  #         ", schema: ",
+  #         Inspect.Atom.inspect(gql_query.schema, opts),
+  #         ", variables: ",
+  #         Inspect.Map.inspect(gql_query.variables, opts),
+  #         ", fragments: ",
+  #         Inspect.List.inspect(fragments, opts),
+  #         ">"
+  #       ])
+  #     end
+  #   end
+  # end
 end

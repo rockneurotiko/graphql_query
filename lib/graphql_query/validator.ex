@@ -6,66 +6,111 @@ defmodule GraphqlQuery.Validator do
   the high-performance Rust-based native implementation. Supports schema-aware
   validation when a schema module is provided.
   """
-  alias GraphqlQuery.Native
+
+  alias GraphqlQuery.{Document, DocumentInfo, Fragment, Native, Signature}
 
   @type document_type :: :query | :schema | :fragment
+  @type document_info :: GraphqlQuery.DocumentInfo.t()
   @type validation_error :: GraphqlQuery.ValidationError.t()
 
   @doc """
   Validates GraphQL documents.
 
   Accepts different input types:
-  - String queries
-  - GraphqlQuery.Document structs  
+  - GraphqlQuery.Document structs
   - GraphqlQuery.Fragment structs
 
-  Returns :ok if valid, {:error, [validation_error()]} if invalid with detailed error messages.
+  Returns {:ok, document} if valid, {:error, [validation_error()]} if invalid with detailed error messages.
+  If the validation is correct, the document will have its `document_info` field populated with the document's signature and other metadata.
 
   ## Examples
-
-  ### String query validation
-
-      iex> GraphqlQuery.Validator.validate(~s|query GetUser($id: ID!) { user(id: $id) { name } }|)
-      :ok
-
-      iex> result = GraphqlQuery.Validator.validate("query T($unused: String) { field }")
-      iex> match?({:error, [%GraphqlQuery.ValidationError{} | _]}, result)
-      true
 
   ### Document struct validation
 
       iex> document = GraphqlQuery.Document.new("query GetUser { user { id } }")
-      iex> GraphqlQuery.Validator.validate(document)
-      :ok
+      iex> {:ok, updated_document} = GraphqlQuery.Validator.validate(document)
+      iex> %GraphqlQuery.DocumentInfo{} = updated_document.document_info
 
       iex> schema_doc = GraphqlQuery.Document.new("type Query { field: String }", type: :schema)
-      iex> GraphqlQuery.Validator.validate(schema_doc)
-      :ok
+      iex> {:ok, updated_schema} = GraphqlQuery.Validator.validate(schema_doc)
+      iex> %GraphqlQuery.DocumentInfo{} = updated_schema.document_info
 
   ### Fragment struct validation
 
       iex> fragment = GraphqlQuery.Document.new("fragment UserFields on User { id name }", name: "UserFields", type: :fragment)
-      iex> GraphqlQuery.Validator.validate(fragment)
-      :ok
+      iex> {:ok, updated_fragment} = GraphqlQuery.Validator.validate(fragment)
+      iex> %GraphqlQuery.DocumentInfo{} = updated_fragment.document_info
 
   """
-  @spec validate(String.t()) :: :ok | {:error, [validation_error()]}
-  def validate(query) when is_binary(query) do
-    validate(query, "document.graphql", nil, :query)
-  end
 
-  @spec validate(GraphqlQuery.Document.t()) :: :ok | {:error, [validation_error()]}
-  def validate(%GraphqlQuery.Document{} = query) do
+  @spec validate(Document.t()) ::
+          {:ok, Document.t()} | {:error, [validation_error()]}
+  def validate(%Document{} = query) do
     path = query.path || "document.graphql"
 
-    validate(to_string(query), path, query.schema, query.type)
+    query = maybe_add_document_info(query, path)
+
+    case validate(to_string(query), path, query.schema, query.type) do
+      :ok ->
+        {:ok, query}
+
+      error ->
+        error
+    end
   end
 
-  @spec validate(GraphqlQuery.Fragment.t()) :: :ok | {:error, [validation_error()]}
-  def validate(%GraphqlQuery.Fragment{} = query) do
+  @spec validate(Fragment.t()) ::
+          {:ok, Fragment.t()} | {:error, [validation_error()]}
+  def validate(%Fragment{} = query) do
     path = query.path || "document.graphql"
 
-    validate(to_string(query), path, query.schema, :fragment)
+    query = maybe_add_document_info(query, path)
+
+    case validate(to_string(query), path, query.schema, :fragment) do
+      :ok ->
+        {:ok, query}
+
+      error ->
+        error
+    end
+  end
+
+  defp maybe_add_document_info(document, path) do
+    if needs_document_info?(document) do
+      add_document_info(document, path)
+    else
+      document
+    end
+  end
+
+  defp add_document_info(document, path) do
+    case document_information(document, path) do
+      {:ok, info} ->
+        Document.set_document_info(document, info)
+
+      _error ->
+        Document.set_document_info(document, nil)
+    end
+  end
+
+  @doc """
+  Extracts GraphQL document information.
+  """
+  @spec document_information(Document.t() | Fragment.t(), String.t() | nil) ::
+          {:ok, DocumentInfo.t()} | {:error, [validation_error()]}
+  def document_information(%Document{} = document, path) do
+    Native.document_information(document.query, path)
+  end
+
+  def document_information(%Fragment{} = fragment, path) do
+    Native.document_information(fragment.fragment, path)
+  end
+
+  defp needs_document_info?(%{document_info: nil}), do: true
+  defp needs_document_info?(%{document_info: %{signature: nil}}), do: true
+
+  defp needs_document_info?(%{document_info: %{signature: signature}} = document) do
+    Signature.signature(document) != signature
   end
 
   @doc """
@@ -95,8 +140,8 @@ defmodule GraphqlQuery.Validator do
   ### Document struct validation
 
       iex> document = GraphqlQuery.Document.new("query GetUser { user { id } }")
-      iex> GraphqlQuery.Validator.validate(document)
-      :ok
+      iex> {:ok, updated_document} = GraphqlQuery.Validator.validate(document)
+      iex> %GraphqlQuery.DocumentInfo{} = updated_document.document_info
 
   """
 
@@ -104,10 +149,8 @@ defmodule GraphqlQuery.Validator do
           :ok | {:error, [validation_error()]}
   def validate(query, path, _schema_module, :schema)
       when is_binary(query) and is_binary(path) do
-    case Native.validate_schema(query, path) do
-      {:ok, _} -> :ok
-      {:error, errors} -> {:error, errors}
-    end
+    Native.validate_schema(query, path)
+    |> clean_result()
   end
 
   def validate(query, path, schema_module, :query)
@@ -115,10 +158,8 @@ defmodule GraphqlQuery.Validator do
     schema = if schema_module, do: to_string(schema_module.schema())
     schema_path = if schema_module, do: schema_module.schema_path()
 
-    case Native.validate_query(query, path, schema, schema_path) do
-      {:ok, _} -> :ok
-      {:error, errors} -> {:error, errors}
-    end
+    Native.validate_query(query, path, schema, schema_path)
+    |> clean_result()
   end
 
   def validate(query, path, schema_module, :fragment)
@@ -126,9 +167,10 @@ defmodule GraphqlQuery.Validator do
     schema = if schema_module, do: to_string(schema_module.schema())
     schema_path = if schema_module, do: schema_module.schema_path()
 
-    case Native.validate_fragment(query, path, schema, schema_path) do
-      {:ok, _} -> :ok
-      {:error, errors} -> {:error, errors}
-    end
+    Native.validate_fragment(query, path, schema, schema_path)
+    |> clean_result()
   end
+
+  defp clean_result({:ok, :ok}), do: :ok
+  defp clean_result(other), do: other
 end
