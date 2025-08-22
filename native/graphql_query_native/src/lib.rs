@@ -19,7 +19,6 @@ pub struct ValidationError {
 pub struct Location {
     pub line: usize,
     pub column: usize,
-    pub indentation: usize,
 }
 
 #[derive(Debug, Clone, rustler::NifStruct)]
@@ -94,7 +93,6 @@ fn diagnostics_to_validation_errors(diagnostics: DiagnosticList) -> Vec<Validati
                 .map(|loc| Location {
                     line: loc.line,
                     column: loc.column,
-                    indentation: 0,
                 })
                 .collect();
 
@@ -139,7 +137,6 @@ fn extract_operation_info(document: &Document) -> DocumentInfo {
                     .map(|location| Location {
                         line: location.line,
                         column: location.column,
-                        indentation: 0,
                     });
 
                 match op.operation_type {
@@ -176,7 +173,6 @@ fn extract_operation_info(document: &Document) -> DocumentInfo {
                     .map(|location| Location {
                         line: location.line,
                         column: location.column,
-                        indentation: 0,
                     });
 
                 fragments.push(FragmentInfo {

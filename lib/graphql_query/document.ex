@@ -83,7 +83,7 @@ defmodule GraphqlQuery.Document do
           type: :query | :schema,
           document_info: DocumentInfo.t() | nil,
           ignore?: boolean(),
-          location: GraphqlQuery.Location.t() | nil
+          location: keyword() | nil
         }
 
   @type document :: t() | Fragment.t()
@@ -95,7 +95,7 @@ defmodule GraphqlQuery.Document do
           {:fragments, list(Fragment.t())},
           {:name, String.t() | nil},
           {:ignore?, boolean() | nil},
-          {:location, GraphqlQuery.Location.t() | nil}
+          {:location, keyword() | nil}
         ]
   @spec new(String.t(), new_options()) :: document()
   @doc "Create a new GraphQL document or fragment from a document string and options."

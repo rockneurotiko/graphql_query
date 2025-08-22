@@ -53,7 +53,7 @@ defmodule GraphqlQuery.Parser do
       # Returns: %{message: "[GraphqlQuery] Validation error: Unused variable", location: [...]}
 
   """
-  def format_error(error, warn_location, prefix) do
+  def format_error(%GraphqlQuery.ValidationError{} = error, warn_location, prefix) do
     location = error_location(error, warn_location)
 
     file_path = warn_location[:file] || "unknown"
@@ -62,6 +62,13 @@ defmodule GraphqlQuery.Parser do
     msg = "[GraphqlQuery] #{error_prefix} #{error.message}"
 
     %{message: msg, location: location}
+  end
+
+  def format_error(error, location, prefix) when is_binary(error) do
+    file_path = location[:file] || "unknown"
+    error_prefix = error_prefix(prefix, location, file_path)
+
+    "[GraphqlQuery] #{error_prefix} #{error}"
   end
 
   defp error_location(error, warn_location) do

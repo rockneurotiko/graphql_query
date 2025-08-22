@@ -9,6 +9,8 @@ defmodule GraphqlQuery do
 
   alias __MODULE__.{Parser, Document, Validator}
 
+  require GraphqlQuery.Logger
+
   @doc """
   Sets up the module to use GraphQL query macros and validation.
 
@@ -270,7 +272,7 @@ defmodule GraphqlQuery do
       schema: schema_module,
       fragments: fragments_evaluated,
       ignore?: ignore?,
-      location: location_from_warn_location(warn_location)
+      location: warn_location
     ]
 
     query = contents |> Document.new(query_opts)
@@ -339,15 +341,13 @@ defmodule GraphqlQuery do
     fragments = get_option(opts, :fragments, [], caller)
     fragments_evaluated = expand_fragments!(fragments, caller)
 
-    location = location_from_warn_location(warn_location)
-
     query_opts = [
       path: file,
       type: type,
       schema: schema_module,
       fragments: fragments_evaluated,
       ignore?: ignore?,
-      location: location
+      location: warn_location
     ]
 
     query = content |> Document.new(query_opts)
@@ -363,16 +363,15 @@ defmodule GraphqlQuery do
         validate_on_runtime(content, query_opts, warn_location)
 
       Enum.empty?(fragments) ->
-        IO.warn(
-          """
-          [GraphqlQuery] GraphQL query is static.
+        msg = """
+        [GraphqlQuery] GraphQL query is static.
 
-          Using the ~GQL sigil for static queries is recommended.
+        Using the ~GQL sigil for static queries is recommended.
 
-          To disable this warning, use the [ignore: true] option.
-          """,
-          warn_location
-        )
+        To disable this warning, use the [ignore: true] option.
+        """
+
+        GraphqlQuery.Logger.warning(msg, warn_location)
 
         query |> do_validate(warn_location) |> Macro.escape()
 
@@ -429,27 +428,27 @@ defmodule GraphqlQuery do
 
     has_dynamic_parts? = dynamic_parts != []
 
-    location = location_from_warn_location(warn_location)
-
     query_opts = [
       path: file,
       type: type,
       schema: schema_module,
       fragments: fragments,
       ignore?: ignore?,
-      location: location
+      location: warn_location
     ]
 
-    document =
-      quote do
-        Document.new(unquote(original), unquote(query_opts))
-      end
+    # document =
+    #   quote do
+    #     Document.new(unquote(original), unquote(query_opts))
+    #   end
 
     evaluated_query_opts = Keyword.put(query_opts, :fragments, fragments_evaluated)
 
     cond do
       ignore? ->
-        document
+        quote do
+          Document.new(unquote(original), unquote(query_opts))
+        end
 
       runtime_validation? ->
         # Validate on runtime
@@ -469,10 +468,15 @@ defmodule GraphqlQuery do
         # We have dynamic parts, no runtime validation and we don't ignore it, so print a warning
 
         Enum.each(dynamic_parts, fn expr ->
-          IO.warn(error_msg(expr, evaluate?), warn_location(expr, caller))
+          msg = error_msg(expr, evaluate?)
+          location = warn_location(expr, caller)
+
+          GraphqlQuery.Logger.warning(msg, location)
         end)
 
-        document
+        quote do
+          Document.new(unquote(original), unquote(query_opts))
+        end
     end
   end
 
@@ -620,22 +624,21 @@ defmodule GraphqlQuery do
       schema: schema_module,
       fragments: fragments_evaluated,
       ignore?: ignore?,
-      location: location_from_warn_location(warn_location)
+      location: warn_location
     ]
-
-    query = Document.new(query_string, query_opts)
 
     cond do
       ignore? ->
         # If the ignore option is set, we skip validation
+        query = Document.new(query_string, query_opts)
         Macro.escape(query)
 
       runtime? ->
-        # We want to validate on runtime anyway, maybe we'll add fragments later
+        # We want to validate on runtime anyway
         query_opts = Keyword.put(query_opts, :fragments, fragments)
         validate_on_runtime(query_string, query_opts, warn_location)
 
-      Parser.has_dynamic_parts?(to_string(query)) ->
+      Parser.has_dynamic_parts?(query_string) ->
         msg = """
         [GraphqlQuery] GraphQL query contains dynamic parts.
         │
@@ -644,11 +647,14 @@ defmodule GraphqlQuery do
         │ To disable this warning, use the `i` modifier: ~g"{}"#{opts}i
         """
 
-        IO.warn(msg, warn_location)
+        GraphqlQuery.Logger.warning(msg, warn_location)
 
+        query = Document.new(query_string, query_opts)
         Macro.escape(query)
 
       true ->
+        query = Document.new(query_string, query_opts)
+
         case Validator.validate(query) do
           :ok ->
             Macro.escape(query)
@@ -681,13 +687,6 @@ defmodule GraphqlQuery do
       column: column,
       indentation: indentation
     ]
-  end
-
-  defp location_from_warn_location(warn_location) do
-    line = Keyword.get(warn_location, :line, 0)
-    column = Keyword.get(warn_location, :column, 0)
-    indentation = Keyword.get(warn_location, :indentation, 0)
-    GraphqlQuery.Location.new(line, column, indentation) |> Macro.escape()
   end
 
   defp expand_until_string(ast, caller, evaluate?) do
@@ -790,12 +789,12 @@ defmodule GraphqlQuery do
 
       {:error, error} ->
         msg = error_msg_invalid_fragment(ast, error)
-        IO.warn(msg, warn_location(ast, caller))
+        GraphqlQuery.Logger.warning(msg, warn_location(ast, caller))
         nil
 
       :error ->
         msg = error_msg_invalid_fragment(ast, nil)
-        IO.warn(msg, warn_location(ast, caller))
+        GraphqlQuery.Logger.warning(msg, warn_location(ast, caller))
         nil
     end
   end
@@ -869,7 +868,7 @@ defmodule GraphqlQuery do
 
   defp validate_on_runtime(document, query_opts, warn_location) do
     quote do
-      require Logger
+      require GraphqlQuery.Logger
       calculated_query = unquote(document)
       file_path = unquote(warn_location)[:file]
 
@@ -883,7 +882,7 @@ defmodule GraphqlQuery do
           Enum.each(errors, fn error ->
             error = GraphqlQuery.Parser.format_error(error, unquote(warn_location), :runtime)
 
-            Logger.warning(error.message, error.location)
+            GraphqlQuery.Logger.warning(error.message, error.location)
           end)
 
           query
@@ -907,7 +906,7 @@ defmodule GraphqlQuery do
     Enum.each(errors, fn error ->
       error = Parser.format_error(error, warn_location, prefix)
 
-      IO.warn(error.message, error.location)
+      GraphqlQuery.Logger.warning(error.message, error.location)
     end)
   end
 
