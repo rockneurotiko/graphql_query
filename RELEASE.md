@@ -11,7 +11,7 @@ releasing is a bit more involved than it would be otherwise.
 
 1. Begin drafting a new release.
 
-    1. Go to https://github.com/rockneurotiko/graphql_query/releases.
+    1. Go to https://github.com/rockneurotiko/graphql_query/releases
     1. Click "Draft a new release".
     1. Under "Select tag", set the tag to `v{version}`, e.g. `v0.3.0`.
     1. Keep the target branch as `main`.
@@ -24,6 +24,7 @@ releasing is a bit more involved than it would be otherwise.
     * Updating the `version` in any other files that reference it, like
         * `README.md`
         * Do a `grep` or `rg` with the version number to check the files
+    * Updating the `CHANGELOG.md` file
 
 1. Merge the PR.
 

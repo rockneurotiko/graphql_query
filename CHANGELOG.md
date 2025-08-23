@@ -4,10 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.3.4]
+
+### Added
+- Use DocumentInfo to try to extract a unique name (when there is only one document)
+- Use DocumentInfo to detect multiple or non fragments defined when type is fragment and log a warning
+- Use DocumentInfo to add only the extra fragments needed
+- Create `GraphqlQuery.Logger` helper for compile-time and runtime logging
+- Add `CHANGELOG.md` file
+- Add a CI test to detect modules not added in the documentation
+
+### Changed
+- Add DocumentInfo on Document.new instead of validate.
+
+## [v0.3.3]
+
 ### Added
 - `document_with_options` macro for GraphQL document creation with custom options
 - DocumentInfo support when parsing GraphQL documents for better validation context
-- Logger helper for compile-time and runtime logging
 
 ### Changed
 - Enhanced document parsing with document_info integration
