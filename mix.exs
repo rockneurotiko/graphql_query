@@ -73,7 +73,7 @@ defmodule GraphqlQuery.MixProject do
         "GraphqlQuery Entities": [
           GraphqlQuery.Schema,
           GraphqlQuery.Document,
-          GrapqhqlQuery.DocumentInfo,
+          GraphqlQuery.DocumentInfo,
           GraphqlQuery.QueryInfo,
           GraphqlQuery.Fragment,
           GraphqlQuery.FragmentInfo,

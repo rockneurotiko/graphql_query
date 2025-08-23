@@ -88,3 +88,6 @@ jobs:
 
       - name: Compile once again but without optional deps
         run: mix compile --force --warnings-as-errors --no-optional-deps
+
+      - name: All top level modules exists on mix.exs
+        run: bash ./bin/check_modules_docs.sh

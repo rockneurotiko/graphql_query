@@ -1,0 +1,85 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+### Added
+- `document_with_options` macro for GraphQL document creation with custom options
+- DocumentInfo support when parsing GraphQL documents for better validation context
+- Logger helper for compile-time and runtime logging
+
+### Changed
+- Enhanced document parsing with document_info integration
+- Improved documentation
+
+### Fixed
+- Fixed Dialyzer cache key issues
+
+## [v0.3.2]
+
+### Added
+- Document and Fragment structs for better GraphQL document handling
+- Support for specifying fragments on queries
+- Improved Inspect protocol support for Elixir 1.19
+
+### Changed
+- Enhanced documentation with better examples and formatting
+- Improved README with logo and better structure
+- Better CI configuration and testing
+
+### Fixed
+- Fixed documentation module groupings in ExDoc
+- Various documentation and formatting improvements
+
+## [v0.3.1]
+
+### Added
+- Project logo and improved visual documentation
+- Better documentation structure and examples
+
+### Changed
+- Enhanced documentation formatting and presentation
+- Improved package metadata and descriptions
+
+## [v0.3.0]
+
+### Added
+- Schema support for GraphQL validation
+- Module compilation checks to ensure dependencies are loaded
+- Expanded OTP version support
+
+### Changed
+- Relaxed version constraints for better compatibility
+- Improved formatter and export functionality
+- Better error handling and validation
+
+### Fixed
+- Fixed compatibility issues with various OTP versions
+- Resolved clippy suggestions and code quality improvements
+
+## [v0.2.0]
+
+### Added
+- `gql` macro for inline GraphQL query definition
+- New macro system for better developer experience
+- VERSION constant in mix.exs
+
+### Changed
+- Major refactor from function-based to macro-based API
+- Improved parser implementation
+- Enhanced README documentation with usage examples
+
+### Fixed
+- Fixed test suite after API changes
+- Improved binary handling and parsing
+- Better error messages and validation
+
+## [v0.1.0]
+
+### Added
+- Initial release of GraphQL Query library
+- Rust-based GraphQL parsing via Rustler NIFs
+- Basic query validation and formatting functionality
+- CI/CD workflow with GitHub Actions
+- Rustler precompiled binaries support
