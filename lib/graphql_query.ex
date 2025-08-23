@@ -173,7 +173,13 @@ defmodule GraphqlQuery do
   The transformation happens at compile time, so there's no runtime overhead.
   """
   defmacro document_with_options(opts, do: block) do
-    validate_options!(Keyword.delete(opts, :schema))
+    caller = __CALLER__
+
+    # TODO: Try to expand all options, if some fails, throw an error if no runtime
+
+    opts = Keyword.update(opts, :fragments, [], &expand_fragments!(&1, caller))
+
+    validate_options!(opts)
 
     modified_block = Macro.prewalk(block, fn ast -> add_extra_opts_to_ast(ast, opts) end)
 
@@ -726,8 +732,19 @@ defmodule GraphqlQuery do
     end)
   end
 
+  defp expand_fragments!({_, _, _} = ast, caller) do
+    case evaluate_ast(ast, caller) do
+      {:ok, result} -> result
+      _ -> ast
+    end
+  end
+
   defp expand_fragments!(fragments, caller) do
     fragments |> Enum.map(&expand_fragment!(&1, caller)) |> Enum.reject(&is_nil/1)
+  end
+
+  defp expand_fragment!(%GraphqlQuery.Fragment{} = fragment, _caller) do
+    fragment
   end
 
   # credo:disable-for-next-line
@@ -1014,7 +1031,17 @@ defmodule GraphqlQuery do
   end
 
   defp validate_options!(options) do
-    GraphqlQuery.MacroOptions.validate!(Keyword.delete(options, :schema))
+    options
+    |> Keyword.delete(:schema)
+    |> Enum.filter(fn
+      {_, {_, _, _}} ->
+        # ast detected, don't validate
+        false
+
+      {_, _} ->
+        true
+    end)
+    |> GraphqlQuery.MacroOptions.validate!()
   end
 
   defp get_module_attribute(module, key) do
