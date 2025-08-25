@@ -588,7 +588,7 @@ defmodule GraphqlQuery do
     file = caller.file
     warn_location = warn_location(meta, caller)
 
-    opts = sigil_opts_to_keyword(sigil_opts)
+    opts = opts_sigil_to_keyword(sigil_opts)
 
     # TODO: extra_opts might be an AST
     opts = Keyword.merge(extra_opts, opts)
@@ -672,6 +672,7 @@ defmodule GraphqlQuery do
 
         :error ->
           v = Keyword.get(module_opts, opt, default)
+          # credo:disable-for-next-line
           if opt == :schema, do: ensure_module_loaded!(v, caller)
           {opt, v}
       end
@@ -861,7 +862,7 @@ defmodule GraphqlQuery do
 
   defp ensure_module_loaded!(other), do: other
 
-  defp sigil_opts_to_keyword(sigil_opts) do
+  defp opts_sigil_to_keyword(sigil_opts) do
     Enum.reduce(sigil_opts, [], fn
       ?i, acc -> Keyword.put(acc, :ignore, true)
       ?r, acc -> Keyword.put(acc, :runtime, true)
