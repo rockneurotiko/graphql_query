@@ -11,6 +11,8 @@ defmodule GraphqlQuery do
 
   require GraphqlQuery.Logger
 
+  defguardp ast?(value) when is_tuple(value) and tuple_size(value) == 3
+
   @doc """
   Sets up the module to use GraphQL query macros and validation.
 
@@ -34,12 +36,13 @@ defmodule GraphqlQuery do
 
   """
   defmacro __using__(opts) do
-    module = __CALLER__.module
+    caller = __CALLER__
+    module = caller.module
     schema = opts[:schema]
     opts = validate_options!(Keyword.delete(opts, :schema))
 
     if schema do
-      loaded_schema = ensure_module_loaded!(schema)
+      loaded_schema = ensure_module_loaded!(schema, caller)
       behaviours = get_module_behaviours(loaded_schema)
 
       if GraphqlQuery.Schema not in behaviours do
@@ -283,14 +286,14 @@ defmodule GraphqlQuery do
 
     query = contents |> Document.new(query_opts)
 
+    module_opts = get_module_opts(caller)
+
     cond do
+      runtime_validation? ->
+        validate_on_runtime(contents, opts, module_opts, warn_location)
+
       ignore? ->
         Macro.escape(query)
-
-      runtime_validation? ->
-        # Validate on runtime
-        query_opts = Keyword.put(query_opts, :fragments, fragments)
-        validate_on_runtime(contents, query_opts, warn_location)
 
       true ->
         query |> do_validate(warn_location) |> Macro.escape()
@@ -356,17 +359,15 @@ defmodule GraphqlQuery do
       location: warn_location
     ]
 
-    query = content |> Document.new(query_opts)
+    module_opts = get_module_opts(caller)
 
     cond do
       ignore? ->
-        Macro.escape(query)
+        content |> Document.new(query_opts) |> Macro.escape()
 
       runtime_validation? ->
         # Validate on runtime
-        query_opts = Keyword.merge(query_opts, fragments: fragments)
-
-        validate_on_runtime(content, query_opts, warn_location)
+        validate_on_runtime(content, opts, module_opts, warn_location)
 
       Enum.empty?(fragments) ->
         msg = """
@@ -379,10 +380,10 @@ defmodule GraphqlQuery do
 
         GraphqlQuery.Logger.warning(msg, warn_location)
 
-        query |> do_validate(warn_location) |> Macro.escape()
+        content |> Document.new(query_opts) |> do_validate(warn_location) |> Macro.escape()
 
       true ->
-        query |> do_validate(warn_location) |> Macro.escape()
+        content |> Document.new(query_opts) |> do_validate(warn_location) |> Macro.escape()
     end
   end
 
@@ -411,7 +412,6 @@ defmodule GraphqlQuery do
     type = get_option(opts, :type, :query, caller)
 
     fragments = get_option(opts, :fragments, [], caller)
-    fragments_evaluated = expand_fragments!(fragments, caller)
 
     {static_parts, dynamic_parts} =
       Enum.map_reduce(parts, [], fn
@@ -425,10 +425,15 @@ defmodule GraphqlQuery do
               # Successfully expanded to a string
               {value, acc}
 
-            _ ->
+            {:error, error} ->
               # We can't expand it :(
 
-              {ast, acc ++ [ast]}
+              {ast, acc ++ [{ast, error}]}
+
+            :error ->
+              # We can't expand it :(
+
+              {ast, acc ++ [{ast, :error}]}
           end
       end)
 
@@ -443,12 +448,7 @@ defmodule GraphqlQuery do
       location: warn_location
     ]
 
-    # document =
-    #   quote do
-    #     Document.new(unquote(original), unquote(query_opts))
-    #   end
-
-    evaluated_query_opts = Keyword.put(query_opts, :fragments, fragments_evaluated)
+    module_opts = get_module_opts(caller)
 
     cond do
       ignore? ->
@@ -458,12 +458,15 @@ defmodule GraphqlQuery do
 
       runtime_validation? ->
         # Validate on runtime
-        validate_on_runtime(original, query_opts, warn_location)
+        validate_on_runtime(original, opts, module_opts, warn_location)
 
       not has_dynamic_parts? ->
         # Compile validation
 
         compile_time_str = Enum.join(static_parts)
+
+        fragments_evaluated = expand_fragments!(fragments, caller)
+        evaluated_query_opts = Keyword.put(query_opts, :fragments, fragments_evaluated)
 
         compile_time_str
         |> Document.new(evaluated_query_opts)
@@ -473,8 +476,8 @@ defmodule GraphqlQuery do
       true ->
         # We have dynamic parts, no runtime validation and we don't ignore it, so print a warning
 
-        Enum.each(dynamic_parts, fn expr ->
-          msg = error_msg(expr, evaluate?)
+        Enum.each(dynamic_parts, fn {expr, error} ->
+          msg = error_msg(expr, error, evaluate?)
           location = warn_location(expr, caller)
 
           GraphqlQuery.Logger.warning(msg, location)
@@ -579,49 +582,26 @@ defmodule GraphqlQuery do
   end
 
   # credo:disable-for-next-line
-  defmacro sigil_GQL({:<<>>, meta, [query_string]}, opts, extra_opts) do
+  defmacro sigil_GQL({:<<>>, meta, [query_string]}, sigil_opts, extra_opts) do
     # Validate at compile time
     caller = __CALLER__
     file = caller.file
     warn_location = warn_location(meta, caller)
 
-    ignore? =
-      if ?i in opts do
-        true
-      else
-        get_option(extra_opts, :ignore, false, caller)
-      end
+    opts = sigil_opts_to_keyword(sigil_opts)
 
-    runtime? =
-      if ?r in opts do
-        true
-      else
-        get_option(extra_opts, :runtime, false, caller)
-      end
+    # TODO: extra_opts might be an AST
+    opts = Keyword.merge(extra_opts, opts)
 
-    type =
-      cond do
-        ?s in opts ->
-          :schema
+    module_opts = get_module_opts(caller)
+    opts = compile_options(opts, module_opts, caller)
 
-        ?q in opts ->
-          :query
+    ignore? = opts[:ignore]
+    runtime? = opts[:runtime]
+    type = opts[:type]
+    schema_module = opts[:schema]
 
-        ?f in opts ->
-          :fragment
-
-        true ->
-          get_option(extra_opts, :type, :query, caller)
-      end
-
-    schema_module =
-      if module = get_option(extra_opts, :schema, nil, caller) do
-        ensure_module_loaded!(module)
-      else
-        nil
-      end
-
-    fragments = get_option(extra_opts, :fragments, [], caller)
+    fragments = opts[:fragments]
     fragments_evaluated = expand_fragments!(fragments, caller)
 
     query_opts = [
@@ -640,9 +620,7 @@ defmodule GraphqlQuery do
         Macro.escape(query)
 
       runtime? ->
-        # We want to validate on runtime anyway
-        query_opts = Keyword.put(query_opts, :fragments, fragments)
-        validate_on_runtime(query_string, query_opts, warn_location)
+        validate_on_runtime(query_string, opts, module_opts, warn_location)
 
       Parser.has_dynamic_parts?(query_string) ->
         msg = """
@@ -661,19 +639,43 @@ defmodule GraphqlQuery do
       true ->
         query = Document.new(query_string, query_opts)
 
-        case Validator.validate(query) do
-          :ok ->
-            Macro.escape(query)
-
-          {:error, errors} ->
-            prefix =
-              "Validation errors, if you want to ignore them use the i modifier: ~G\"{}\"#{opts}i\n"
-
-            print_warnings(errors, warn_location, prefix)
-
-            Macro.escape(query)
-        end
+        query |> do_validate(warn_location, :sigil) |> Macro.escape()
     end
+  end
+
+  @options [
+    {:ignore, false},
+    {:runtime, false},
+    {:evaluate, false},
+    {:type, :query},
+    {:schema, nil},
+    {:fragments, []}
+  ]
+
+  def runtime_options(macro_opts, module_opts) do
+    Keyword.new(@options, fn {opt, default} ->
+      case Keyword.fetch(macro_opts, opt) do
+        {:ok, v} -> {opt, v}
+        :error -> {opt, Keyword.get(module_opts, opt, default)}
+      end
+    end)
+  end
+
+  # TODO: Handle macro_opts or inner values being AST instead of values
+  defp compile_options(macro_opts, module_opts, caller) do
+    Keyword.new(@options, fn {opt, default} ->
+      case Keyword.fetch(macro_opts, opt) do
+        {:ok, v} ->
+          if opt == :schema, do: ensure_module_loaded!(v, caller)
+
+          {opt, v}
+
+        :error ->
+          v = Keyword.get(module_opts, opt, default)
+          if opt == :schema, do: ensure_module_loaded!(v, caller)
+          {opt, v}
+      end
+    end)
   end
 
   defp warn_location(meta, caller, shift \\ 0)
@@ -695,7 +697,7 @@ defmodule GraphqlQuery do
     ]
   end
 
-  defp expand_until_string(ast, caller, evaluate?) do
+  defp expand_until(ast, caller, evaluate?, until_f) do
     ast
     |> Macro.prewalker()
     |> Enum.reduce_while(:error, fn
@@ -703,34 +705,33 @@ defmodule GraphqlQuery do
         # We went too far
         {:halt, acc}
 
-      {:@, _, [{name, _, _}]}, acc ->
-        case get_module_attribute(caller.module, name) do
-          binary when is_binary(binary) ->
-            {:halt, {:ok, binary}}
-
-          %GraphqlQuery.Fragment{} = fragment ->
-            {:halt, {:ok, fragment}}
-
-          %GraphqlQuery.Document{} = document ->
-            {:halt, {:ok, to_string(document)}}
-
-          :undefined ->
+      expr, acc ->
+        with {:ok, value} <- expand_and_evaluate(expr, caller, evaluate?),
+             {:ok, new_value} <- until_f.(value) do
+          {:halt, {:ok, new_value}}
+        else
+          {:error, :module_attribute} ->
             {:halt, {:error, :module_attribute}}
+
+          {:halt, error} ->
+            {:halt, error}
 
           _ ->
             {:cont, acc}
         end
-
-      expr, acc ->
-        case Macro.expand(expr, caller) do
-          string when is_binary(string) ->
-            {:halt, {:ok, string}}
-
-          ast ->
-            maybe_evaluate_ast(ast, caller, acc, evaluate?)
-        end
     end)
   end
+
+  defp expand_until_string(ast, caller, evaluate?) do
+    expand_until(ast, caller, evaluate?, fn
+      string when is_binary(string) -> {:ok, string}
+      %GraphqlQuery.Fragment{} = fragment -> {:ok, to_string(fragment)}
+      %GraphqlQuery.Document{} = document -> {:ok, to_string(document)}
+      _ -> :error
+    end)
+  end
+
+  defp expand_fragments!(nil, _caller), do: []
 
   defp expand_fragments!({_, _, _} = ast, caller) do
     case evaluate_ast(ast, caller) do
@@ -749,56 +750,10 @@ defmodule GraphqlQuery do
 
   # credo:disable-for-next-line
   defp expand_fragment!(ast, caller) do
-    ast
-    |> Macro.prewalker()
-    |> Enum.reduce_while(:error, fn
-      string, acc when is_binary(string) ->
-        # We went too far
-        {:halt, acc}
-
-      {:@, _, [{name, _, _}]}, acc ->
-        case get_module_attribute(caller.module, name) do
-          %GraphqlQuery.Fragment{} = fragment ->
-            {:halt, {:ok, fragment}}
-
-          %GraphqlQuery.Document{} ->
-            {:halt, {:error, :document}}
-
-          :undefined ->
-            {:halt, {:error, :module_attribute}}
-
-          _ ->
-            {:cont, acc}
-        end
-
-      expr, acc ->
-        case Macro.expand(expr, caller) do
-          {:%{}, [], q} = struct_ast ->
-            case q[:__struct__] do
-              GraphqlQuery.Document ->
-                {:halt, {:error, :document}}
-
-              GraphqlQuery.Fragment ->
-                {fragment, _} = Code.eval_quoted(struct_ast)
-                {:halt, {:ok, fragment}}
-
-              _ ->
-                {:cont, acc}
-            end
-
-          ast ->
-            # credo:disable-for-next-line
-            case evaluate_ast(ast, caller) do
-              {:ok, %GraphqlQuery.Fragment{} = fragment} ->
-                {:halt, {:ok, fragment}}
-
-              {:ok, %GraphqlQuery.Document{}} ->
-                {:halt, {:error, :document}}
-
-              _ ->
-                {:cont, acc}
-            end
-        end
+    expand_until(ast, caller, true, fn
+      %GraphqlQuery.Fragment{} = fragment -> {:ok, fragment}
+      %GraphqlQuery.Document{} -> {:halt, {:error, :document}}
+      other -> {:halt, {:error, {:not_fragment, other}}}
     end)
     |> case do
       {:ok, fragment} ->
@@ -816,29 +771,45 @@ defmodule GraphqlQuery do
     end
   end
 
-  defp maybe_evaluate_ast(_ast, _caller, acc, false) do
-    {:cont, acc}
-  end
-
-  defp maybe_evaluate_ast(ast, caller, acc, true) do
-    case evaluate_ast(ast, caller) do
-      {:ok, value} when is_binary(value) ->
-        {:halt, {:ok, value}}
-
-      {:ok, %GraphqlQuery.Document{} = query} ->
-        {:halt, {:ok, to_string(query)}}
-
-      {:ok, %GraphqlQuery.Fragment{} = fragment} ->
-        {:halt, {:ok, to_string(fragment)}}
-
-      _ ->
-        {:cont, acc}
+  defp expand_and_evaluate({:@, _, [{name, _, _}]}, caller, _evaluate?) do
+    case get_module_attribute(caller.module, name) do
+      :undefined -> {:error, :module_attribute}
+      value -> {:ok, value}
     end
   end
 
+  defp expand_and_evaluate(ast, caller, evaluate?) when ast?(ast) do
+    case Macro.expand(ast, caller) do
+      ast when ast?(ast) ->
+        maybe_evaluate_ast(ast, caller, evaluate?)
+
+      value ->
+        {:ok, value}
+    end
+  end
+
+  defp expand_and_evaluate(value, _caller, _evaluate?), do: {:ok, value}
+
+  defp maybe_evaluate_ast(ast, _caller, false) when ast?(ast), do: :error
+
+  defp maybe_evaluate_ast(ast, caller, true) when ast?(ast) do
+    evaluate_ast(ast, caller)
+  end
+
+  defp maybe_evaluate_ast(value, _caller, _evaluate?), do: {:ok, value}
+
   # Function calls
   defp evaluate_ast({{:., _, _}, _, _} = ast, caller) do
-    ensure_modules_loaded(ast)
+    ensure_modules_loaded(ast, caller)
+    {value, _binding} = Code.eval_quoted(ast, [], caller)
+    {:ok, value}
+  rescue
+    _e ->
+      :error
+  end
+
+  defp evaluate_ast({:., _, _} = ast, caller) do
+    ensure_modules_loaded(ast, caller)
     {value, _binding} = Code.eval_quoted(ast, [], caller)
     {:ok, value}
   rescue
@@ -856,24 +827,31 @@ defmodule GraphqlQuery do
 
   defp evaluate_ast(_ast, _caller), do: :ignore
 
-  defp ensure_modules_loaded({:., _meta, [module | _]}) do
+  defp ensure_modules_loaded({{:., _, _} = call_ast, _, asts}, caller) do
+    ensure_modules_loaded(call_ast, caller)
+    Enum.each(asts, &ensure_module_loaded!(&1, caller))
+  end
+
+  defp ensure_modules_loaded({:., _meta, [module | _]}, caller) do
+    ensure_module_loaded!(module, caller)
+  end
+
+  defp ensure_modules_loaded({_, _meta, asts}, caller) when is_list(asts) do
+    Enum.each(asts, &ensure_modules_loaded(&1, caller))
+  end
+
+  defp ensure_module_loaded!(nil, _), do: nil
+
+  defp ensure_module_loaded!({:__aliases__, _meta, [module | _]} = ast, caller)
+       when is_atom(module) do
+    ast |> Macro.expand(caller) |> ensure_module_loaded!()
+  end
+
+  defp ensure_module_loaded!(module, _caller) when is_atom(module) do
     ensure_module_loaded!(module)
   end
 
-  defp ensure_modules_loaded({{:., _, _} = call_ast, _, asts}) do
-    ensure_modules_loaded(call_ast)
-    Enum.each(asts, &ensure_module_loaded!/1)
-  end
-
-  defp ensure_modules_loaded({_, _meta, asts}) when is_list(asts) do
-    Enum.each(asts, &ensure_modules_loaded/1)
-  end
-
-  defp ensure_module_loaded!(nil), do: nil
-
-  defp ensure_module_loaded!({:__aliases__, _meta, [module | _] = parts}) when is_atom(module) do
-    parts |> Module.concat() |> ensure_module_loaded!()
-  end
+  defp ensure_module_loaded!(other, _caller), do: other
 
   defp ensure_module_loaded!(module) when is_atom(module) do
     Code.ensure_compiled!(module)
@@ -883,13 +861,48 @@ defmodule GraphqlQuery do
 
   defp ensure_module_loaded!(other), do: other
 
-  defp validate_on_runtime(document, query_opts, warn_location) do
+  defp sigil_opts_to_keyword(sigil_opts) do
+    Enum.reduce(sigil_opts, [], fn
+      ?i, acc -> Keyword.put(acc, :ignore, true)
+      ?r, acc -> Keyword.put(acc, :runtime, true)
+      ?s, acc -> Keyword.put(acc, :type, :schema)
+      ?f, acc -> Keyword.put(acc, :type, :fragment)
+      ?q, acc -> Keyword.put(acc, :type, :query)
+      _, acc -> acc
+    end)
+  end
+
+  defp get_module_opts(caller) do
+    [
+      runtime: get_module_attribute(caller.module, :__graphql_query__runtime, false),
+      ignore: get_module_attribute(caller.module, :__graphql_query__ignore, false),
+      evaluate: get_module_attribute(caller.module, :__graphql_query__evaluate, false),
+      type: get_module_attribute(caller.module, :__graphql_query__type, :query),
+      schema:
+        get_module_attribute(caller.module, :__graphql_query__schema, nil)
+        |> ensure_module_loaded!(caller),
+      fragments: get_module_attribute(caller.module, :__graphql_query__fragments, [])
+    ]
+  end
+
+  defp validate_on_runtime(document, opts, module_opts, warn_location) do
     quote do
       require GraphqlQuery.Logger
       calculated_query = unquote(document)
       file_path = unquote(warn_location)[:file]
 
-      query = Document.new(calculated_query, unquote(query_opts))
+      opts = GraphqlQuery.runtime_options(unquote(opts), unquote(module_opts))
+
+      query_opts = [
+        path: file_path,
+        type: opts[:type],
+        schema: opts[:schema],
+        fragments: opts[:fragments],
+        ignore?: opts[:ignore],
+        location: unquote(warn_location)
+      ]
+
+      query = Document.new(calculated_query, query_opts)
 
       case Validator.validate(query) do
         :ok ->
@@ -907,13 +920,22 @@ defmodule GraphqlQuery do
     end
   end
 
-  defp do_validate(document, warn_location) do
+  defp do_validate(document, warn_location, source \\ :macro) do
     case Validator.validate(document) do
       :ok ->
         document
 
       {:error, errors} ->
-        print_warnings(errors, warn_location, "Validation error:")
+        prefix =
+          case source do
+            :macro ->
+              "Validation errors, if you want to ignore them use the [ignore: true] option.\n"
+
+            :sigil ->
+              "Validation errors, if you want to ignore them use the i modifier: ~G\"{}\"i\n"
+          end
+
+        print_warnings(errors, warn_location, prefix)
 
         document
     end
@@ -940,7 +962,32 @@ defmodule GraphqlQuery do
     """
   end
 
+  defp error_msg_invalid_fragment(ast, {:not_fragment, value}) do
+    """
+    [GraphqlQuery] Fragment in #{Macro.to_string(ast)} evaluated as #{inspect(value)} instead of %GraphqlQuery.Fragment{}
+
+    To ignore this warning, use the `ignore: true` option.
+    """
+  end
+
   defp error_msg_invalid_fragment(ast, :module_attribute) do
+    # We tried to evaluate a @module_attribute at compile time, but it failed
+
+    error_msg(ast, :module_attribute, true)
+  end
+
+  defp error_msg_invalid_fragment(ast, _) do
+    # We tried to evaluate the query at compile time, but it failed
+
+    """
+    [GraphqlQuery] Could not expand to a valid %GraphqlQuery.Fragment{} struct the part #{Macro.to_string(ast)} at compile time.
+
+    To validate in runtime, use the `runtime: true` option.
+    To ignore this warning, use the `ignore: true` option.
+    """
+  end
+
+  defp error_msg(ast, :module_attribute, _) do
     # We tried to evaluate a @module_attribute at compile time, but it failed
 
     ast_string = Macro.to_string(ast)
@@ -957,18 +1004,7 @@ defmodule GraphqlQuery do
     """
   end
 
-  defp error_msg_invalid_fragment(ast, _) do
-    # We tried to evaluate the query at compile time, but it failed
-
-    """
-    [GraphqlQuery] Could not expand to a valid %GraphqlQuery.Fragment{} struct the part #{Macro.to_string(ast)} at compile time.
-
-    To validate in runtime, use the `runtime: true` option.
-    To ignore this warning, use the `ignore: true` option.
-    """
-  end
-
-  defp error_msg(ast, true) do
+  defp error_msg(ast, _error, true) do
     # We tried to evaluate the query at compile time, but it failed
 
     """
@@ -979,14 +1015,14 @@ defmodule GraphqlQuery do
     """
   end
 
-  defp error_msg(ast, false) do
+  defp error_msg(ast, _error, false) do
     # We tried to expand, but not evaluate
 
     """
     [GraphqlQuery] Could not expand the part #{Macro.to_string(ast)} at compile time.
 
-    To try to evaluate calls at compile time, use the `evaluate: true` option.
     To validate in runtime, use the `runtime: true` option.
+    To try to evaluate calls at compile time, use the `evaluate: true` option.
     To ignore this warning, use the `ignore: true` option.
     """
   end
@@ -999,13 +1035,13 @@ defmodule GraphqlQuery do
       :not_set ->
         # If schema is not set, we try to get it from the module attributes
         get_module_attribute(caller.module, :__graphql_query__schema, nil)
-        |> ensure_module_loaded!()
+        |> ensure_module_loaded!(caller)
 
       module when is_atom(module) ->
-        ensure_module_loaded!(module)
+        ensure_module_loaded!(module, caller)
 
       {:__aliases__, _meta, _mod_parts} = module_alias ->
-        ensure_module_loaded!(module_alias)
+        ensure_module_loaded!(module_alias, caller)
 
       _ ->
         nil
@@ -1020,15 +1056,43 @@ defmodule GraphqlQuery do
     else
       get_module_attribute(caller.module, module_attribute_key, default)
     end
-
-    # case get_in(opts, [Access.key(key)]) do
-    #   nil ->
-    #     get_module_attribute(caller.module, module_attribute_key, default)
-
-    #   value ->
-    #     value
-    # end
   end
+
+  # defp validate_options({:@, _, [{name, _, _}]}, caller) do
+  #   get_module_attribute(caller.module, name) |> validate_options(caller)
+  # end
+
+  # defp validate_options({_, _, _}, _) do
+  #   {:error, :runtime}
+  # end
+
+  # defp validate_options(nil, _), do: {:ok, []}
+
+  # defp validate_options(options, caller) when is_list(options) do
+  #   Enum.reduce_while(options, {:ok, []}, fn {k, v}, {:ok, acc} ->
+  #     case validate_option_value(k, v, caller) do
+  #       {:error, reason} ->
+  #         {:halt, {:error, reason, k}}
+
+  #       {:ok, valid_value} ->
+  #         {:cont, {:ok, Keyword.put(acc, k, valid_value)}}
+  #     end
+  #   end)
+  # end
+
+  # defp validate_options(_other, _caller), do: {:erro, :unknown_options}
+
+  # defp validate_option_value(:schema, v, _caller) when is_atom(v), do: {:ok, v}
+
+  # defp validate_option_value(:fragments, frags, caller) when is_list(frags) do
+  #   expanded = expand_fragments!(frags, caller)
+
+  #   if Enum.count(frags) != Enum.count(expanded) do
+  #     {:error, :invalid_fragments}
+  #   else
+  #     {:ok, expanded}
+  #   end
+  # end
 
   defp validate_options!(options) do
     options
