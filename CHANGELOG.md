@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Documentation cheatsheet (`docs/cheatsheet.cheatmd`)
+- Elixir macro documentation (`docs/macros.md`)
+
+### Changed
+- Enhanced macro options validation and processing
+- Improved code organization and macro cleanup
+- Enhanced option checking for better validation coverage
+
 ## [v0.3.4]
 
 ### Added

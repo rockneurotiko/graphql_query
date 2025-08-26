@@ -46,6 +46,7 @@ defmodule GraphqlQuery.Schema do
       else
         @impl GraphqlQuery.Schema
         def schema_path, do: unquote(__CALLER__.file)
+        defoverridable schema_path: 0
       end
     end
   end

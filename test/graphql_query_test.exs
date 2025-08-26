@@ -3,6 +3,8 @@ defmodule GraphqlQueryTest do
   import GraphqlQuery
   doctest GraphqlQuery
 
+  import ExUnit.CaptureLog
+
   alias GraphqlQuery.{Document, Fragment}
 
   describe "document_with_options/2" do
@@ -878,6 +880,473 @@ defmodule GraphqlQueryTest do
       assert logs =~ "warning"
       assert logs =~ "Validation errors"
       assert logs =~ "syntax error: expected at least one Selection in Selection Set"
+    end
+  end
+
+  describe "unresolvable options - runtime fallback" do
+    test "gql macro - internal function call in options should warn" do
+      query_ast =
+        quote do
+          defmodule TestUnresolvableFunction do
+            import GraphqlQuery
+
+            defp schema do
+              Test.Schema
+            end
+
+            def query do
+              gql [schema: schema()], "query { user { id name unknown } }"
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      assert logs =~ "[GraphqlQuery] Can't extract options on compile time" or
+               logs =~ "Falling back to runtime validation"
+
+      call_ast =
+        quote do
+          TestUnresolvableFunction.query()
+        end
+
+      {query, logs} =
+        with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      assert %Document{query: result, type: :query} = query
+      assert result == "query { user { id name unknown } }"
+      assert logs =~ "type `User` does not have a field `unknown`"
+    end
+
+    test "gql macro - variable as options should warn" do
+      query_ast =
+        quote do
+          defmodule TestUnresolvableVariable do
+            import GraphqlQuery
+
+            def query do
+              opts = [schema: Test.Schema]
+              gql opts, "query { user { id name unknown } }"
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      assert logs =~ "[GraphqlQuery] Can't extract options on compile time" or
+               logs =~ "Falling back to runtime validation"
+
+      call_ast =
+        quote do
+          TestUnresolvableVariable.query()
+        end
+
+      {query, logs} =
+        with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      assert %Document{query: result, type: :query} = query
+      assert result == "query { user { id name unknown } }"
+      assert logs =~ "type `User` does not have a field `unknown`"
+    end
+
+    test "gql macro - function accessing variables should warn" do
+      query_ast =
+        quote do
+          defmodule TestFunctionWithVariables do
+            import GraphqlQuery
+
+            def query do
+              schema = Test.Schema
+              gql [schema: schema], "query { user { id name unknown } }"
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      assert logs =~
+               "[GraphqlQuery] Can't extract the value for the option \"schema\" on compile time."
+
+      assert logs =~ "Falling back to runtime validation"
+
+      call_ast =
+        quote do
+          TestFunctionWithVariables.query()
+        end
+
+      {query, logs} =
+        with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      assert %Document{query: result, type: :query} = query
+      assert result == "query { user { id name unknown } }"
+      assert logs =~ "type `User` does not have a field `unknown`"
+    end
+
+    test "gql macro with invalid fragment option should warn" do
+      query_ast =
+        quote do
+          defmodule TestFragmentsUnresolvable do
+            import GraphqlQuery
+
+            defp get_fragments do
+              "not a valid fragments list"
+            end
+
+            def query do
+              gql [fragments: get_fragments()], "query { user { id } }"
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      assert logs =~ "Can't extract options on compile time" or
+               logs =~ "Falling back to runtime validation"
+    end
+
+    test "gql_from_file macro - function call in options should warn" do
+      content = "query { user { id name unknown } }"
+
+      with_tmp_file(content, fn file_path ->
+        query_ast =
+          quote do
+            defmodule TestGqlFromFileUnresolvable do
+              import GraphqlQuery
+
+              defp get_schema_dynamically do
+                Test.Schema
+              end
+
+              def query do
+                gql_from_file(unquote(file_path), schema: get_schema_dynamically())
+              end
+            end
+          end
+
+        logs =
+          ExUnit.CaptureIO.capture_io(:stderr, fn ->
+            Code.eval_quoted(query_ast)
+          end)
+
+        assert logs =~ "Can't extract options on compile time" or
+                 logs =~ "Falling back to runtime validation"
+
+        call_ast =
+          quote do
+            TestGqlFromFileUnresolvable.query()
+          end
+
+        {query, logs} =
+          with_log(fn ->
+            {query, _} = Code.eval_quoted(call_ast)
+            query
+          end)
+
+        assert %Document{query: result, type: :query} = query
+        assert result == content
+        assert logs =~ "type `User` does not have a field `unknown`"
+      end)
+    end
+
+    test "gql_from_file macro - specific opt in options should warn" do
+      content = "query { user { id name unknown } }"
+
+      with_tmp_file(content, fn file_path ->
+        query_ast =
+          quote do
+            defmodule TestGqlFromFileUnresolvable do
+              import GraphqlQuery
+
+              def query do
+                schema = Test.Schema
+                gql_from_file(unquote(file_path), schema: schema)
+              end
+            end
+          end
+
+        logs =
+          ExUnit.CaptureIO.capture_io(:stderr, fn ->
+            Code.eval_quoted(query_ast)
+          end)
+
+        assert logs =~
+                 "[GraphqlQuery] Can't extract the value for the option \"schema\" on compile time."
+
+        assert logs =~ "Falling back to runtime validation"
+
+        call_ast =
+          quote do
+            TestGqlFromFileUnresolvable.query()
+          end
+
+        {query, logs} =
+          with_log(fn ->
+            {query, _} = Code.eval_quoted(call_ast)
+            query
+          end)
+
+        assert %Document{query: result, type: :query} = query
+        assert result == content
+        assert logs =~ "type `User` does not have a field `unknown`"
+      end)
+    end
+
+    test "gql_from_file macro - function with variables should warn" do
+      content = "query { user { id name unknown } }"
+
+      with_tmp_file(content, fn file_path ->
+        query_ast =
+          quote do
+            defmodule TestGqlFromFileVars do
+              import GraphqlQuery
+
+              def query do
+                opts = [schema: Test.Schema]
+                gql_from_file(unquote(file_path), opts)
+              end
+            end
+          end
+
+        logs =
+          ExUnit.CaptureIO.capture_io(:stderr, fn ->
+            Code.eval_quoted(query_ast)
+          end)
+
+        assert logs =~ "Can't extract options on compile time"
+        assert logs =~ "Falling back to runtime validation"
+
+        call_ast =
+          quote do
+            TestGqlFromFileVars.query()
+          end
+
+        {query, logs} =
+          with_log(fn ->
+            {query, _} = Code.eval_quoted(call_ast)
+            query
+          end)
+
+        assert %Document{query: result, type: :query} = query
+        assert result == content
+        assert logs =~ "type `User` does not have a field `unknown`"
+      end)
+    end
+
+    test "document_with_options - function call in options should warn" do
+      query_ast =
+        quote do
+          defmodule TestDocumentWithUnresolvable do
+            import GraphqlQuery
+
+            defp schema do
+              Test.Schema
+            end
+
+            def query do
+              document_with_options schema: schema() do
+                ~GQL"{
+  user {
+    id
+    name
+    unknown
+  }
+}
+"
+              end
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      assert logs =~ "Can't extract the value for the option \"schema\" on compile time"
+      assert logs =~ "Falling back to runtime validation"
+
+      call_ast =
+        quote do
+          TestDocumentWithUnresolvable.query()
+        end
+
+      {query, logs} =
+        with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      assert %Document{query: result, type: :query} = query
+      assert result == "{\n  user {\n    id\n    name\n    unknown\n  }\n}\n"
+      assert logs =~ "type `User` does not have a field `unknown`"
+    end
+
+    test "document_with_options - function accessing variables should warn" do
+      query_ast =
+        quote do
+          defmodule TestDocumentWithVars do
+            import GraphqlQuery
+
+            def query do
+              opts = [schema: Test.Schema]
+
+              document_with_options opts do
+                ~GQL"""
+                {
+                  user {
+                    id
+                    name
+                    unknown
+                  }
+                }
+                """
+              end
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      assert logs =~ "Can't extract options on compile time"
+      assert logs =~ "Falling back to runtime validation"
+
+      call_ast =
+        quote do
+          TestDocumentWithVars.query()
+        end
+
+      {query, logs} =
+        with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      assert %Document{query: result, type: :query} = query
+      assert result == "{\n  user {\n    id\n    name\n    unknown\n  }\n}\n"
+      assert logs =~ "type `User` does not have a field `unknown`"
+    end
+
+    test "warning messages contain documentation links" do
+      query_ast =
+        quote do
+          defmodule TestDocumentationLinks do
+            import GraphqlQuery
+
+            def query do
+              opts = [schema: Test.Schema]
+              gql opts, "query { user { id } }"
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      assert logs =~ "If you want to learn more about what is allowed in Elixir Macros"
+      assert logs =~ "following documentation https://hexdocs.pm/graphql_query/doc/macros.html"
+    end
+
+    test "basic unresolvable case with invalid fragment type" do
+      query_ast =
+        quote do
+          defmodule TestInvalidFragments do
+            import GraphqlQuery
+
+            @invalid_fragments ~GQL"""
+            fragment Test on User {
+              name
+            }
+            """i
+
+            def query do
+              gql [fragments: [@invalid_fragments]], "query { user { id } }"
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      # Should warn about invalid fragments
+      assert logs =~ "Invalid fragments detected"
+      assert logs =~ "Make sure that you use the `type: fragment` option."
+      assert logs =~ "Falling back to runtime validation"
+    end
+
+    test "document_with_options with invalid fragment type" do
+      query_ast =
+        quote do
+          defmodule TestInvalidFragments do
+            import GraphqlQuery
+
+            @invalid_fragments ~GQL"""
+            fragment Test on User {
+              name
+            }
+            """i
+
+            def query do
+              document_with_options fragments: [@invalid_fragments] do
+                ~GQL"""
+                {
+                  user {
+                    id
+                  }
+                }
+                """
+              end
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.eval_quoted(query_ast)
+        end)
+
+      # Should warn about invalid fragments
+      assert logs =~ "Invalid fragments detected"
+      assert logs =~ "Make sure that you use the `type: fragment` option."
+      assert logs =~ "Falling back to runtime validation"
+    end
+  end
+
+  defp with_tmp_file(content, callback) do
+    file_path = "test_#{abs(:erlang.unique_integer())}"
+    File.write!(file_path, content)
+
+    try do
+      callback.(file_path)
+    after
+      File.rm(file_path)
     end
   end
 end
