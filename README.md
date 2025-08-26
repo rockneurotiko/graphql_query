@@ -93,6 +93,8 @@ No Rust installation required — precompiled binaries are used.
 
 ### Examples
 
+You can find more examples in the [Cheatsheet](cheatsheet.cheatmd), here is a little compilation.
+
 #### Example: Compile-time Document Validation
 
 ```elixir
