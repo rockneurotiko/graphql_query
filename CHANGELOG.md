@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Support for Absinthe schema extraction
+
+### Changed
+- Improved cheatsheet documentation with expanded examples
+
 ## [v0.3.5]
 
 ### Added

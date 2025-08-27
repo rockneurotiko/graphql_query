@@ -68,16 +68,13 @@ defmodule GraphqlQuery.MixProject do
       extras: ["docs/cheatsheet.cheatmd", "docs/macros.md", "CHANGELOG.md"],
       groups_for_modules: [
         GraphqlQuery: [
-          GraphqlQuery,
-          GraphqlQuery.MacroOptions,
-          GraphqlQuery.ValidationError,
-          GraphqlQuery.Location,
-          GraphqlQuery.Logger,
-          GraphqlQuery.Parser,
-          GraphqlQuery.Signature
+          GraphqlQuery
+        ],
+        "Schema definition": [
+          GraphqlQuery.Schema,
+          GraphqlQuery.Schema.Absinthe
         ],
         "GraphqlQuery Entities": [
-          GraphqlQuery.Schema,
           GraphqlQuery.Document,
           GraphqlQuery.DocumentInfo,
           GraphqlQuery.QueryInfo,
@@ -95,6 +92,14 @@ defmodule GraphqlQuery.MixProject do
         ],
         Native: [
           GraphqlQuery.Native
+        ],
+        "Internal modules": [
+          GraphqlQuery.MacroOptions,
+          GraphqlQuery.ValidationError,
+          GraphqlQuery.Location,
+          GraphqlQuery.Logger,
+          GraphqlQuery.Parser,
+          GraphqlQuery.Signature
         ]
       ]
     ]
@@ -127,13 +132,15 @@ defmodule GraphqlQuery.MixProject do
         "cmd cargo clippy --manifest-path=native/graphql_query_native/Cargo.toml -- -Dwarnings"
       ],
       "rust.fmt": ["cmd cargo fmt --manifest-path=native/graphql_query_native/Cargo.toml --all"],
+      fmt: ["format", "rust.fmt"],
       ci: [
+        "fmt",
         "compile --warnings-as-errors",
         "cmd mix test --warnings-as-errors",
         "credo",
         "dialyzer",
         "rust.lint",
-        "rust.fmt"
+        "cmd ./bin/check_modules_docs.sh"
       ]
     ]
   end

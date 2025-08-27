@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-modules=$(grep "defmodule" lib/**/*.ex | grep ":defmodule" | awk '/defmodule/ {print $2}')
+mix compile
+
+modules=$(mix run -e ':application.get_key(:graphql_query, :modules) |> elem(1) |> Enum.each(&IO.inspect/1)' | grep -e '^GraphqlQuery')
 
 missing_modules=()
 
