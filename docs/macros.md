@@ -16,9 +16,7 @@ If you want to do runtime validation and have weird compile access, but don't wa
 
 `use GraphqlQuery, runtime: true`
 
-## Access to your own module attributes in methods.
-
-✅ Valid!
+## ✅ Access to your own module attributes in methods.
 
 In Elixir, module attributes and code outside of code blocks are compiled first, and then the method's bodies are compiled.
 That means that from inside a method we can access the module attributes.
@@ -36,9 +34,7 @@ end
 
 ```
 
-## Access to your own module attributes from other module attributes
-
-❌ Invalid!
+## ❌ Access to your own module attributes from other module attributes
 
 In Elixir, module attributes and code outside of code blocks are compiled first, and they don't have access to the content of other "peers" at the same level.
 That means that we can't reference other module attributes in compile time.
@@ -53,9 +49,7 @@ defmodule Test do
 end
 ```
 
-## Access to other module public methods, as long as their value is known at compile time.
-
-✅ Valid!
+## ✅ Access to other module public methods, as long as their value is known at compile time.
 
 GraphqlQuery will detect the usage of other modules and will wait for their compilation, and if the method's value is static, we can access from the macro:
 
@@ -80,9 +74,7 @@ defmodule Test do
 end
 ```
 
-## Access variable values
-
-❌ Invalid!
+## ❌ Access variable values
 
 This is probably the most shocking one. But you can't access the variable values in your method or module, even if they are a static value like a string.
 

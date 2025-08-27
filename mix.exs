@@ -41,6 +41,7 @@ defmodule GraphqlQuery.MixProject do
       {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)},
       {:nimble_options, "~> 1.1"},
       {:jason, "~> 1.4", optional: true},
+      {:absinthe, "~> 1.7", optional: true},
 
       # Development
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -64,7 +65,7 @@ defmodule GraphqlQuery.MixProject do
       logo: "graphql_query_exdoc.png",
       source_ref: "v#{@version}",
       source_url: @source_url,
-      extras: ["README.md", "CHANGELOG.md", "docs/macros.md", "docs/cheatsheet.cheatmd"],
+      extras: ["docs/cheatsheet.cheatmd", "docs/macros.md", "CHANGELOG.md"],
       groups_for_modules: [
         GraphqlQuery: [
           GraphqlQuery,

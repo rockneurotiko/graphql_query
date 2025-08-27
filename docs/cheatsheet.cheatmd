@@ -32,8 +32,9 @@ end
 ## use GraphqlQuery.Schema
 {: .col-2}
 
-### Basic Schema Module
+### Load schema from a graphql file
 
+#### schema.ex
 ```elixir
 defmodule MyApp.Schema do
   use GraphqlQuery.Schema,
@@ -42,13 +43,29 @@ end
 ```
 {: .wrap}
 
+#### priv/schema.graphql
+```graphql
+schema {
+  query: RootQueryType
+}
+
+"An item"
+type Item {
+  id: ID
+  name: String
+}
+
+type RootQueryType {
+  item(id: ID!): Item
+}
+```
+
+
 ### Manual schema module
 
 ```elixir
 defmodule MyApp.Schema do
-  use GraphqlQuery
-
-  @behaviour GraphqlQuery.Schema
+  use GraphqlQuery.Schema
 
   @impl GraphqlQuery.Schema
   def schema do
@@ -56,12 +73,45 @@ defmodule MyApp.Schema do
     ~GQL""s
   end
 
+  # Optional: By default is this module's file path
+  # Can be nil, or a string. It's used for validation errors
   @impl GraphqlQuery.Schema
   def schema_path, do: nil
-  # Can be nil, or a string. It's used for validation errors
 end
 ```
 {: .wrap}
+
+### Load schema from an Absinthe schema
+
+#### schema.ex
+```elixir
+defmodule MyApp.Schema do
+  use GraphqlQuery.Schema, absinthe_schema: MyAppWeb.Graphql.Schema
+end
+```
+{: .wrap}
+
+#### my_app_web/graphql/schema.ex
+```elixir
+defmodule MyAppWeb.Graphql.Schema do
+  use Absinthe.Schema
+
+  @desc "An item"
+  object :item do
+    field(:id, :id)
+    field(:name, :string)
+  end
+
+  query do
+    field :item, :item do
+      arg(:id, non_null(:id))
+
+      resolve(&Resolvers.resolve_item/3)
+    end
+  end
+end
+```
+
 
 ## ~GQL Sigil
 {: .col-2}
