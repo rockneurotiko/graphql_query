@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.3.5]
+
 ### Added
 - Documentation cheatsheet (`docs/cheatsheet.cheatmd`)
 - Elixir macro documentation (`docs/macros.md`)
