@@ -41,6 +41,7 @@ defmodule GraphqlQuery.MixProject do
       {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)},
       {:nimble_options, "~> 1.1"},
       {:jason, "~> 1.4", optional: true},
+      {:absinthe, "~> 1.7", optional: true},
 
       # Development
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -64,19 +65,16 @@ defmodule GraphqlQuery.MixProject do
       logo: "graphql_query_exdoc.png",
       source_ref: "v#{@version}",
       source_url: @source_url,
-      extras: ["README.md", "CHANGELOG.md", "docs/macros.md", "docs/cheatsheet.cheatmd"],
+      extras: ["docs/cheatsheet.cheatmd", "docs/macros.md", "CHANGELOG.md"],
       groups_for_modules: [
         GraphqlQuery: [
-          GraphqlQuery,
-          GraphqlQuery.MacroOptions,
-          GraphqlQuery.ValidationError,
-          GraphqlQuery.Location,
-          GraphqlQuery.Logger,
-          GraphqlQuery.Parser,
-          GraphqlQuery.Signature
+          GraphqlQuery
+        ],
+        "Schema definition": [
+          GraphqlQuery.Schema,
+          GraphqlQuery.Schema.Absinthe
         ],
         "GraphqlQuery Entities": [
-          GraphqlQuery.Schema,
           GraphqlQuery.Document,
           GraphqlQuery.DocumentInfo,
           GraphqlQuery.QueryInfo,
@@ -94,6 +92,14 @@ defmodule GraphqlQuery.MixProject do
         ],
         Native: [
           GraphqlQuery.Native
+        ],
+        "Internal modules": [
+          GraphqlQuery.MacroOptions,
+          GraphqlQuery.ValidationError,
+          GraphqlQuery.Location,
+          GraphqlQuery.Logger,
+          GraphqlQuery.Parser,
+          GraphqlQuery.Signature
         ]
       ]
     ]
@@ -126,13 +132,15 @@ defmodule GraphqlQuery.MixProject do
         "cmd cargo clippy --manifest-path=native/graphql_query_native/Cargo.toml -- -Dwarnings"
       ],
       "rust.fmt": ["cmd cargo fmt --manifest-path=native/graphql_query_native/Cargo.toml --all"],
+      fmt: ["format", "rust.fmt"],
       ci: [
+        "fmt",
         "compile --warnings-as-errors",
         "cmd mix test --warnings-as-errors",
         "credo",
         "dialyzer",
         "rust.lint",
-        "rust.fmt"
+        "cmd ./bin/check_modules_docs.sh"
       ]
     ]
   end

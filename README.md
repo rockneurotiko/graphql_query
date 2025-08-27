@@ -45,7 +45,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 - **Developer tool**: Focused on **validation, formatting, compile-time and runtime safety**.
 - **External APIs integration**: Build and validate queries against external GraphQL APIs. Never miss a deprecated field, a type error in the arguments or a typo in the fields you are fetching.
 - **Best match for your tests**: Use in your tests to build and validate queries against any GraphQL schema (external APIs, you own Absinthe schema, ...), catch issues early on development.
-- **Not a GraphQL server**: [Absinthe](https://hex.pm/packages/absinthe) is for building GraphQL servers. `GraphqlQuery` is for validating and formatting queries against schemas (including external APIs). They complement each other.
+- **Not a GraphQL server**: [Absinthe](https://hex.pm/packages/absinthe) is for building GraphQL servers. `GraphqlQuery` is for validating and formatting queries against schemas (including external APIs). They complement each other perfectly - you can extract your Absinthe schema and use it to validate client queries on tests.
 
 ---
 
@@ -63,6 +63,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 - ✅ **Query formatting** with consistent indentation
 - ✅ **Mix format integration** for `~GQL` sigil, `.graphql` and `.gql` files
 - ✅ **Schema modules** with automatic recompilation on schema changes
+- ✅ **Absinthe schema integration** for validating queries against existing Absinthe schemas
 - ✅ **Flexible validation modes**: compile-time, runtime, or ignore
 - ✅ **JSON encoding support** for Document structs (JSON/Jason protocols)
 - ⚡ Backed by Rust for fast parsing and validation
@@ -530,6 +531,8 @@ type Query { user(id: ID!): User }
 - Provides `schema/0` and `schema_path/0`
 - Recompiles when schema file changes
 
+#### From GraphQL Files
+
 Automatically implement the behaviour with a schema file:
 
 ```elixir
@@ -537,6 +540,18 @@ defmodule MyApp.Schema do
   use GraphqlQuery.Schema, schema_path: "priv/graphql/schema.graphql"
 end
 ```
+
+#### From Absinthe Schemas
+
+Automatically extract schema from existing Absinthe schema modules, really useful specially for testing:
+
+```elixir
+defmodule MyApp.Schema do
+  use GraphqlQuery.Schema, absinthe_schema: MyAppWeb.Graphql.Schema
+end
+```
+
+#### Manual Implementation
 
 Or manually implement the behaviour:
 
@@ -635,8 +650,7 @@ Check the documentation of these modules if you want to know more about the manu
 - [ ] When validation error, try to detect if it's in a fragment, and if it's an "imported" fragment, print the error in the fragment's location
 - [ ] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
 - [ ] Optional compile-time validation via Mix task
-- [ ] Do we need `gql`? It might lead to bad habits
-- [ ] If we want `gql`, fix line reporting on expanded queries
+- [ ] Fix line reporting on validation errors on gql on expanded code
 
 
 ### Done
@@ -650,10 +664,9 @@ Check the documentation of these modules if you want to know more about the manu
 - [x] Allow to set fragments in individual queries or per-module (`document_with_options` macro)
 - [x] Extract document info, and calculate if possible name and signature
 - [x] Improve non-compile time options detection and fallback to runtime/ignore
+- [x] GraphqlQuery.Schema with Absinthe schema
 
 ---
-
-
 
 ## License
 Beerware 🍺 — do whatever you want with it, but if we meet, buy me a beer. (This is essentially MIT-like. Use it freely, but if we meet, buy me a beer)
