@@ -205,41 +205,37 @@ defmodule GraphqlQuery do
     end
   end
 
-  defp warning_options_error(error, field, warn_location) do
-    msg =
-      case {error, field} do
-        {_, :opts} ->
-          """
-          [GraphqlQuery] Can't extract options on compile time.
+  defp warning_options_error({:invalid_fragments, errors}, _field, warn_location) do
+    Enum.each(errors, fn {error, ast} ->
+      msg_line = error_msg_invalid_fragment(ast, error)
 
-          Falling back to runtime validation.
+      msg = expand_error_msg(msg_line)
 
-          If you want to learn more about what is allowed in Elixir Macros you can read
-          the following documentation https://hexdocs.pm/graphql_query/doc/macros.html
-          """
+      GraphqlQuery.Logger.warning(msg, warn_location)
+    end)
+  end
 
-        {:invalid_fragments, _field} ->
-          """
-          [GraphqlQuery] Invalid fragments detected. Make sure that you use the `type: fragment` option.
-
-          Falling back to runtime validation.
-
-          If you want to learn more about what is allowed in Elixir Macros you can read
-          the following documentation https://hexdocs.pm/rockneurotiko/graphql_query/GraphqlQuery.MacroOptions.html
-          """
-
-        _ ->
-          """
-          [GraphqlQuery] Can't extract the value for the option "#{field}" on compile time.
-
-          Falling back to runtime validation.
-
-          If you want to learn more about what is allowed in Elixir Macros you can read
-          the following documentation https://hexdocs.pm/rockneurotiko/graphql_query/GraphqlQuery.MacroOptions.html
-          """
+  defp warning_options_error(_error, field, warn_location) do
+    msg_line =
+      case field do
+        :opts -> "[GraphqlQuery] Can't extract options on compile time."
+        _ -> "Can't extract the value for the option \"#{field}\" on compile time."
       end
 
+    msg = expand_error_msg(msg_line)
+
     GraphqlQuery.Logger.warning(msg, warn_location)
+  end
+
+  defp expand_error_msg(error_line) do
+    """
+    [GraphqlQuery] #{error_line}
+
+    Falling back to runtime validation.
+
+    If you want to learn more about what is allowed in Elixir Macros you can read
+    the following documentation https://hexdocs.pm/graphql_query/macros.html
+    """
   end
 
   defp global_ignore?(caller) do
@@ -370,7 +366,6 @@ defmodule GraphqlQuery do
     type = get_option(opts, :type, :query, caller)
     schema_module = get_schema_module(opts, caller)
     fragments = get_option(opts, :fragments, [], caller)
-    fragments_evaluated = expand_fragments!(fragments, caller)
 
     contents = File.read!(file_path)
 
@@ -380,7 +375,7 @@ defmodule GraphqlQuery do
       path: file_path,
       type: type,
       schema: schema_module,
-      fragments: fragments_evaluated,
+      fragments: fragments,
       ignore?: ignore?,
       location: warn_location
     ]
@@ -602,11 +597,8 @@ defmodule GraphqlQuery do
 
         compile_time_str = Enum.join(static_parts)
 
-        fragments_evaluated = expand_fragments!(fragments, caller)
-        evaluated_query_opts = Keyword.put(query_opts, :fragments, fragments_evaluated)
-
         compile_time_str
-        |> Document.new(evaluated_query_opts)
+        |> Document.new(query_opts)
         |> do_validate(warn_location)
         |> Macro.escape()
 
@@ -867,44 +859,26 @@ defmodule GraphqlQuery do
     end)
   end
 
-  defp expand_fragments!(nil, _caller), do: []
-
-  defp expand_fragments!({_, _, _} = ast, caller) do
-    case evaluate_ast(ast, caller) do
-      {:ok, result} -> result
-      _ -> ast
-    end
+  defp expand_fragments(fragments, caller) when is_list(fragments) do
+    Enum.reduce(fragments, {[], []}, fn fragment, {valid, invalid} ->
+      case expand_fragment(fragment, caller) do
+        {:ok, fragment} -> {valid ++ [fragment], invalid}
+        {:error, error} -> {valid, invalid ++ [{error, fragment}]}
+        :error -> {valid, invalid ++ [{:unknown, fragment}]}
+      end
+    end)
   end
 
-  defp expand_fragments!(fragments, caller) do
-    fragments |> Enum.map(&expand_fragment!(&1, caller)) |> Enum.reject(&is_nil/1)
+  defp expand_fragment(%GraphqlQuery.Fragment{} = fragment, _caller) do
+    {:ok, fragment}
   end
 
-  defp expand_fragment!(%GraphqlQuery.Fragment{} = fragment, _caller) do
-    fragment
-  end
-
-  # credo:disable-for-next-line
-  defp expand_fragment!(ast, caller) do
+  defp expand_fragment(ast, caller) do
     expand_until(ast, caller, true, fn
       %GraphqlQuery.Fragment{} = fragment -> {:ok, fragment}
       %GraphqlQuery.Document{} -> {:halt, {:error, :document}}
       other -> {:halt, {:error, {:not_fragment, other}}}
     end)
-    |> case do
-      {:ok, fragment} ->
-        fragment
-
-      {:error, error} ->
-        msg = error_msg_invalid_fragment(ast, error)
-        GraphqlQuery.Logger.warning(msg, warn_location(ast, caller))
-        nil
-
-      :error ->
-        msg = error_msg_invalid_fragment(ast, nil)
-        GraphqlQuery.Logger.warning(msg, warn_location(ast, caller))
-        nil
-    end
   end
 
   defp expand_and_evaluate({:@, _, [{name, _, _}]}, caller, _evaluate?) do
@@ -1095,40 +1069,22 @@ defmodule GraphqlQuery do
 
   defp error_msg_invalid_fragment(ast, :document) do
     # We tried to evaluate the query at compile time, but it failed
-
-    """
-    [GraphqlQuery] Fragment in #{Macro.to_string(ast)} evaluated as %GraphqlQuery.Document{}
-
-    In the fragment's definition use the option `type: :fragment`
-    or the `f` modifier in the sigil `~GQL""f` to define a fragment.
-
-    To ignore this warning, use the `ignore: true` option.
-    """
+    "Fragment in #{Macro.to_string(ast)} evaluated as %GraphqlQuery.Document{}"
   end
 
   defp error_msg_invalid_fragment(ast, {:not_fragment, value}) do
-    """
-    [GraphqlQuery] Fragment in #{Macro.to_string(ast)} evaluated as #{inspect(value)} instead of %GraphqlQuery.Fragment{}
-
-    To ignore this warning, use the `ignore: true` option.
-    """
+    "Fragment in #{Macro.to_string(ast)} evaluated as #{inspect(value)} instead of %GraphqlQuery.Fragment{}"
   end
 
   defp error_msg_invalid_fragment(ast, :module_attribute) do
     # We tried to evaluate a @module_attribute at compile time, but it failed
 
-    error_msg(ast, :module_attribute, true)
+    "Tried to evaluate the module attribute #{Macro.to_string(ast)} at compile time and failed."
   end
 
   defp error_msg_invalid_fragment(ast, _) do
     # We tried to evaluate the query at compile time, but it failed
-
-    """
-    [GraphqlQuery] Could not expand to a valid %GraphqlQuery.Fragment{} struct the part #{Macro.to_string(ast)} at compile time.
-
-    To validate in runtime, use the `runtime: true` option.
-    To ignore this warning, use the `ignore: true` option.
-    """
+    "Could not expand to a valid %GraphqlQuery.Fragment{} struct the part #{Macro.to_string(ast)} at compile time."
   end
 
   defp error_msg(ast, :module_attribute, _) do
@@ -1234,6 +1190,9 @@ defmodule GraphqlQuery do
         {:error, reason} ->
           {:halt, {:error, reason, k}}
 
+        {:error, reason, data} ->
+          {:halt, {:error, {reason, data}, k}}
+
         {:ok, valid_value} ->
           {:cont, {:ok, Keyword.put(acc, k, valid_value)}}
       end
@@ -1293,17 +1252,14 @@ defmodule GraphqlQuery do
   end
 
   defp validate_option_value(:fragments, frags, caller) when is_list(frags) do
-    expanded = expand_fragments!(frags, caller)
-
-    if Enum.count(frags) != Enum.count(expanded) do
-      {:error, :invalid_fragments}
-    else
-      {:ok, expanded}
+    case expand_fragments(frags, caller) do
+      {fragments, []} -> {:ok, fragments}
+      {_fragments, invalid} -> {:error, :invalid_fragments, invalid}
     end
   end
 
-  defp validate_option_value(:fragments, _frags, _caller) do
-    {:error, :invalid_fragments}
+  defp validate_option_value(:fragments, frags, _caller) do
+    {:error, :invalid_fragments, [{:error, :not_a_list, frags}]}
   end
 
   defp get_module_attribute(module, key) do
