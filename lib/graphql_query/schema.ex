@@ -22,8 +22,8 @@ defmodule GraphqlQuery.Schema do
 
   """
 
-  @callback schema() :: String.t()
-  @callback schema_path() :: String.t()
+  @callback schema() :: GraphqlQuery.Document.t()
+  @callback schema_path() :: String.t() | nil
 
   defstruct [:schema, :schema_path]
 
@@ -46,6 +46,7 @@ defmodule GraphqlQuery.Schema do
       else
         @impl GraphqlQuery.Schema
         def schema_path, do: unquote(__CALLER__.file)
+        defoverridable schema_path: 0
       end
     end
   end

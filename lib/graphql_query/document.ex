@@ -275,7 +275,7 @@ defmodule GraphqlQuery.Document do
   def format_query_with_fragments(%__MODULE__{query: query, fragments: fragments} = document) do
     fragments_string =
       fragments
-      |> Enum.filter(&used_fragment?(&1, document))
+      |> filter_used_fragments(document)
       |> Enum.map_join("\n", &Kernel.to_string/1)
       |> String.trim()
 
@@ -284,16 +284,49 @@ defmodule GraphqlQuery.Document do
     |> Enum.join("\n")
   end
 
-  defp used_fragment?(_fragment, %{document_info: nil}), do: true
+  defp filter_used_fragments(fragments, %{document_info: nil}), do: fragments
 
-  defp used_fragment?(fragment, %{document_info: document_info}) do
+  defp filter_used_fragments(fragments, %{document_info: document_info}) do
     all_parts =
       document_info.queries ++
         document_info.mutations ++
         document_info.subscriptions ++
         document_info.fragments
 
-    Enum.any?(all_parts, &fragment_used_in_part?(&1, fragment))
+    used_fragments =
+      Enum.filter(fragments, fn fragment ->
+        Enum.any?(all_parts, &fragment_used_in_part?(&1, fragment))
+      end)
+
+    expand_inner_level_fragments(used_fragments, fragments, document_info)
+  end
+
+  defp expand_inner_level_fragments(used_fragments, fragments, document_info) do
+    already_added = Enum.map(used_fragments, & &1.name) |> MapSet.new()
+
+    new_fragments =
+      Enum.reduce(used_fragments, [], fn
+        %{document_info: nil}, acc ->
+          acc
+
+        fragment, acc ->
+          new_frags =
+            fragment.document_info.fragments
+            |> Enum.flat_map(& &1.fragments)
+            |> Enum.uniq()
+            |> Enum.filter(&(not MapSet.member?(already_added, &1)))
+            |> Enum.map(fn name ->
+              Enum.find(fragments, &(&1.name == name))
+            end)
+            |> Enum.reject(&is_nil/1)
+
+          acc ++ new_frags
+      end)
+
+    case new_fragments do
+      [] -> used_fragments
+      _ -> expand_inner_level_fragments(used_fragments ++ new_fragments, fragments, document_info)
+    end
   end
 
   defp fragment_used_in_part?(%{fragments: used_fragments}, %{name: fragment_name}) do

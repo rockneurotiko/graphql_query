@@ -1,0 +1,407 @@
+# GraphQL Query Cheatsheet
+
+This cheatsheet provides quick reference for the basic and common GraphqlQuery usage.
+
+## use GraphqlQuery
+{: .col-2}
+
+### Basic Usage
+
+```elixir
+defmodule MyApp.Queries do
+  use GraphqlQuery
+  # You have access to ~GQL sigil and other macros
+end
+```
+{: .wrap}
+
+### With Options
+
+```elixir
+defmodule MyApp.Queries do
+  use GraphqlQuery,
+    schema: MyApp.Schema,
+    runtime: false,
+    ignore: false,
+    evaluate: false,
+    fragments: []
+end
+```
+{: .wrap}
+
+## use GraphqlQuery.Schema
+{: .col-2}
+
+### Basic Schema Module
+
+```elixir
+defmodule MyApp.Schema do
+  use GraphqlQuery.Schema,
+    schema_path: "priv/schema.graphql"
+end
+```
+{: .wrap}
+
+### Manual schema module
+
+```elixir
+defmodule MyApp.Schema do
+  use GraphqlQuery
+
+  @behaviour GraphqlQuery.Schema
+
+  @impl GraphqlQuery.Schema
+  def schema do
+    # Suffix "s" to parse as schema
+    ~GQL""s
+  end
+
+  @impl GraphqlQuery.Schema
+  def schema_path, do: nil
+  # Can be nil, or a string. It's used for validation errors
+end
+```
+{: .wrap}
+
+## ~GQL Sigil
+{: .col-2}
+
+### Queries
+
+```elixir
+~GQL"""
+query GetUser($id: ID!) {
+  user(id: $id) {
+    id
+    name
+    email
+  }
+}
+"""
+```
+{: .wrap}
+
+### Fragments
+
+```elixir
+~GQL"""
+fragment UserFields on User {
+  id
+  name
+  email
+}
+"""f # <- Important the "f" option
+```
+{: .wrap}
+
+### Mutation
+
+```elixir
+~GQL"""
+mutation CreateUser($input: UserInput!) {
+  createUser(input: $input) {
+    id
+    name
+  }
+}
+"""
+```
+{: .wrap}
+
+### Schema Definitions
+
+```elixir
+~GQL"""
+type User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
+type Query {
+  user(id: ID!): User
+}
+"""s # <- Important the "s" option
+```
+{: .wrap}
+
+### Sigil Modifiers
+
+```elixir
+# Ignore validation warnings
+~GQL""i
+
+# Runtime validation
+~GQL""r
+
+# Query document (default)
+~GQL""q
+
+# Fragment document
+~GQL""f
+
+# Schema document
+~GQL""s
+```
+{: .wrap}
+
+### Validate with Schema
+
+```elixir
+defmodule MyApp.Queries do
+  use GraphqlQuery, schema: MyApp.Schema
+
+  def get_user do
+    ~GQL"""
+    query GetUser($id: ID!) {
+      user(id: $id) {
+        id
+        name
+      }
+    }
+    """
+  end
+end
+```
+{: .wrap}
+
+## gql_from_file
+{: .col-2}
+
+### Basic File Loading
+
+```elixir
+# Load query from file
+query = gql_from_file("priv/queries/get_user.graphql")
+```
+{: .wrap}
+
+### Other Options
+
+```elixir
+# Load fragment from file
+fragment = gql_from_file("priv/fragments/user.gql", type: :fragment)
+
+# Load schema from file
+schema = gql_from_file("priv/schema.graphql", type: :schema)
+
+# Validate with a schema
+fragment = gql_from_file("priv/fragments/user.gql", schema: MyApp.Schema)
+
+# Add fragments
+fragment = gql_from_file("priv/fragments/user.gql", fragments: [@fragments])
+
+# Skip validation
+query = gql_from_file("priv/queries/get_user.graphql", ignore: true)
+
+# Runtime validation
+query = gql_from_file("priv/queries/get_user.graphql", runtime: true)
+```
+{: .wrap}
+
+## document_with_options
+{: .col-2}
+
+### With ~GQL sigil to validate with schema
+
+```elixir
+document_with_options schema: MySchema do
+  ~GQL"""
+  query GetUser { user { ...UserFragment } }
+  """
+end
+```
+{: .wrap}
+
+### With ~GQL sigil to add fragments
+
+```elixir
+@user_fragment ~GQL"""
+fragment UserFields on User {
+  id
+  name
+  email
+}
+"""f
+
+document_with_options fragments: [@user_fragment] do
+  ~GQL"""
+  query GetUserWithFragment {
+    user {
+      ...UserFields
+    }
+  }
+  """
+end
+```
+{: .wrap}
+
+## gql Macro
+{: .col-2}
+
+### With string interpolation
+
+```elixir
+# Used only when you need to interpolate data
+# But it's prefered to use variables and fragments
+@fields "id name email"
+query = gql "query { user { #{@fields} } }"
+```
+{: .wrap}
+
+### With Options
+
+```elixir
+# With schema validation
+query = gql [schema: MyApp.Schema], ""
+
+# With fragments
+query = gql [fragments: [@user_fragment]], ""
+
+# Skip validation
+query = gql [ignore: true], ""
+
+# Runtime validation
+query = gql [runtime: true], ""
+```
+{: .wrap}
+
+### Dynamic Content
+
+```elixir
+# Useful for testing if you want to build a query with dynamic fields
+def build_user_query(field_list) do
+  fields = Enum.join(field_list)
+  gql [runtime: true], "query { user { #{fields} }"
+end
+```
+{: .wrap}
+
+### With Module Schema
+
+```elixir
+defmodule MyApp.Queries do
+  use GraphqlQuery, schema: MyApp.Schema
+
+  def build_query(fields) do
+    gql "query { user { #{fields} } }"
+  end
+end
+```
+{: .wrap}
+
+
+## Full example!
+
+#### schema.ex
+```elixir
+defmodule Schema do
+  use GraphqlQuery.Schema, schema_path: "priv/schema.graphql"
+end
+```
+
+#### fragments.ex
+```elixir
+defmodule Fragments do
+  use GraphqlQuery, schema: Schema
+
+  def user_fragment do
+    ~GQL"""
+    fragment UserFragment on User {
+      id
+      name
+      email
+    }
+    """f
+  end
+
+  def company_fragment do
+    ~GQL"""
+    fragment CompanyFragment on Company {
+      id
+      name
+    }
+    """f
+  end
+end
+```
+
+#### priv/queries/get_user_with_company_by_id.graphql
+
+```graphql
+query GetUserById($id: ID!) {
+  user(id: $id) {
+    ...UserFragment
+
+    company {
+      ...CompanyFragment
+    }
+  }
+}
+```
+
+#### queries.ex
+```elixir
+defmodule Queries do
+  # The library is smart and will only add used fragments to the final query
+  use GraphqlQuery, schema: Schema, fragments: [Fragments.user_fragment(), Fragments.company_fragment()]
+
+  def user_by_id do
+    ~GQL"""
+    query GetUserById($id: ID!) {
+      user(id: $id) {
+        ...UserFragment
+      }
+    }
+    """
+  end
+
+  def user_and_company_by_id do
+    gql_from_file "priv/queries/get_user_with_company_by_id.graphql"
+  end
+
+  @post_fragment ~GQL"""
+    fragment PostFragment on Post {
+      id
+      title
+      content
+    }
+    """f
+
+  def user_posts do
+    # You can override the available fragments to one specific query
+    document_with_options fragments: [@post_fragment] do
+      ~GQL"""
+      query UserPosts($id: ID!) {
+        posts {
+          ...PostFragment
+        }
+      }
+      """
+    end
+  end
+end
+```
+
+#### requests.ex
+
+```elixir
+defmodule Requests do
+  alias GraphqlQuery.Document
+
+  def user_by_id(user_id) do
+    query = Queries.user_by_id() |> Document.add_variables(id: user_id)
+    Req.post!("/graphql", json: query)
+  end
+
+  def user_and_company_by_id(user_id) do
+    query = Queries.user_and_company_by_id() |> Document.add_variables(id: user_id)
+    Req.post!("/graphql", json: query)
+  end
+
+  def user_posts(user_id) do
+    query = Queries.user_posts() |> Document.add_variables(id: user_id)
+    Req.post!("/graphql", json: query)
+  end
+end
+```

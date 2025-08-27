@@ -37,8 +37,7 @@ defmodule GraphqlQuery.MacroOptions do
                  ]
 
   @moduledoc """
-  Options for the `gql` macro.
-
+  Options for the different macros in the GraphqlQuery module.
 
   • :ignore (boolean()) - Ignore validation errors The default value is false.
 
@@ -82,6 +81,12 @@ defmodule GraphqlQuery.MacroOptions do
   @spec docs() :: String.t()
   def docs do
     NimbleOptions.docs(@config_schema)
+  end
+
+  def to_keyword(%__MODULE__{} = opts) do
+    Map.from_struct(opts)
+    |> Enum.filter(fn {_k, v} -> not is_nil(v) end)
+    |> Keyword.new()
   end
 
   @doc """

@@ -14,6 +14,7 @@ defmodule GraphqlQuery.MixProject do
       description:
         "GraphQL Query provides compile-time and runtime safety for your GraphQL queries and schemas in Elixir.",
       elixir: "~> 1.14",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       dialyzer: dialyzer(),
@@ -22,6 +23,9 @@ defmodule GraphqlQuery.MixProject do
       compilers: Mix.compilers()
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help compile.app" to learn about applications.
   def application do
@@ -60,6 +64,7 @@ defmodule GraphqlQuery.MixProject do
       logo: "graphql_query_exdoc.png",
       source_ref: "v#{@version}",
       source_url: @source_url,
+      extras: ["README.md", "CHANGELOG.md", "docs/macros.md", "docs/cheatsheet.cheatmd"],
       groups_for_modules: [
         GraphqlQuery: [
           GraphqlQuery,

@@ -93,6 +93,8 @@ No Rust installation required — precompiled binaries are used.
 
 ### Examples
 
+You can find more examples in the [Cheatsheet](cheatsheet.cheatmd), here is a little compilation.
+
 #### Example: Compile-time Document Validation
 
 ```elixir
@@ -630,6 +632,7 @@ Check the documentation of these modules if you want to know more about the manu
 
 ### Planned
 
+- [ ] When validation error, try to detect if it's in a fragment, and if it's an "imported" fragment, print the error in the fragment's location
 - [ ] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
 - [ ] Optional compile-time validation via Mix task
 - [ ] Do we need `gql`? It might lead to bad habits
@@ -644,8 +647,9 @@ Check the documentation of these modules if you want to know more about the manu
 - [x] `gql_from_file` macro for file-based queries
 - [x] Schema parsing and validation
 - [x] Custom Document and Fragment representation, with implementation for to_string and json with JSON and Jason
-- [x] Allow to set fragments in individual queries or per-module
+- [x] Allow to set fragments in individual queries or per-module (`document_with_options` macro)
 - [x] Extract document info, and calculate if possible name and signature
+- [x] Improve non-compile time options detection and fallback to runtime/ignore
 
 ---
 
