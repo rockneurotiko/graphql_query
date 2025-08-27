@@ -80,6 +80,9 @@ defmodule GraphqlQuery do
   options like `:schema` and `:fragments`, which are not directly available through
   sigil modifiers.
 
+  If the options can't be expanded on compile time, a warning is printed and
+  the validation are applied at runtime instead.
+
   ## Options
 
     * `:type` - Document type (:query, :schema, :fragment) (default: :query)
@@ -171,8 +174,6 @@ defmodule GraphqlQuery do
   - `~GQL` sigil (adds options as third parameter)
   - `gql/1` and `gql/2` macro calls
   - `gql_from_file/1` and `gql_from_file/2` macro calls
-  - Nested expressions containing GraphqlQuery macros
-  - Multiple macro calls within the same block
 
   The transformation happens at compile time, so there's no runtime overhead.
   """

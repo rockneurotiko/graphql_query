@@ -649,6 +649,7 @@ Check the documentation of these modules if you want to know more about the manu
 - [x] Custom Document and Fragment representation, with implementation for to_string and json with JSON and Jason
 - [x] Allow to set fragments in individual queries or per-module (`document_with_options` macro)
 - [x] Extract document info, and calculate if possible name and signature
+- [x] Improve non-compile time options detection and fallback to runtime/ignore
 
 ---
 
