@@ -22,8 +22,8 @@ defmodule GraphqlQuery.Schema do
 
   """
 
-  @callback schema() :: String.t()
-  @callback schema_path() :: String.t()
+  @callback schema() :: GraphqlQuery.Document.t()
+  @callback schema_path() :: String.t() | nil
 
   defstruct [:schema, :schema_path]
 
