@@ -4,11 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.3.6]
+
 ### Added
 - Support for Absinthe schema extraction
+- When options can't be expanded, it will use global runtime/ignore opts
 
 ### Changed
 - Improved cheatsheet documentation with expanded examples
+- Improved options resolution
 
 ## [v0.3.5]
 
