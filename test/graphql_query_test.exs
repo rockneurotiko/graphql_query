@@ -1269,13 +1269,13 @@ defmodule GraphqlQueryTest do
         end)
 
       assert logs =~ "If you want to learn more about what is allowed in Elixir Macros"
-      assert logs =~ "following documentation https://hexdocs.pm/graphql_query/doc/macros.html"
+      assert logs =~ "following documentation https://hexdocs.pm/graphql_query/macros.html"
     end
 
     test "basic unresolvable case with invalid fragment type" do
       query_ast =
         quote do
-          defmodule TestInvalidFragments do
+          defmodule TestInvalidFragments2 do
             import GraphqlQuery
 
             @invalid_fragments ~GQL"""
@@ -1296,8 +1296,7 @@ defmodule GraphqlQueryTest do
         end)
 
       # Should warn about invalid fragments
-      assert logs =~ "Invalid fragments detected"
-      assert logs =~ "Make sure that you use the `type: fragment` option."
+      assert logs =~ "Fragment in @invalid_fragments evaluated as %GraphqlQuery.Document{}"
       assert logs =~ "Falling back to runtime validation"
     end
 
@@ -1333,9 +1332,467 @@ defmodule GraphqlQueryTest do
         end)
 
       # Should warn about invalid fragments
-      assert logs =~ "Invalid fragments detected"
-      assert logs =~ "Make sure that you use the `type: fragment` option."
-      assert logs =~ "Falling back to runtime validation"
+      assert logs =~ "Fragment in @invalid_fragments evaluated as %GraphqlQuery.Document{}"
+      assert logs =~ "Falling back to runtime validation."
+    end
+  end
+
+  describe "global ignore option" do
+    test "global ignore suppresses compile-time warnings in gql macro" do
+      ast =
+        quote do
+          defmodule TestGlobalIgnoreGql do
+            use GraphqlQuery, ignore: true
+
+            def query_with_unused_var do
+              gql """
+              query GetUser($unused: String) {
+                user {
+                  id
+                  name
+                }
+              }
+              """
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Should not have validation warnings due to global ignore
+      refute logs =~ "unused variable"
+      refute logs =~ "[GraphqlQuery]"
+
+      # But the query should still be resolved correctly at runtime
+      call_ast =
+        quote do
+          TestGlobalIgnoreGql.query_with_unused_var()
+        end
+
+      {query, _} = Code.eval_quoted(call_ast)
+      assert %Document{query: result} = query
+      assert result =~ "query GetUser($unused: String)"
+      assert result =~ "user {"
+      assert result =~ "id"
+      assert result =~ "name"
+    end
+
+    test "global ignore suppresses compile-time warnings in gql_from_file macro" do
+      content = """
+      query GetUser($unused: String) {
+        user {
+          id
+          name
+        }
+      }
+      """
+
+      with_tmp_file(content, fn file_path ->
+        ast =
+          quote do
+            defmodule TestGlobalIgnoreGqlFromFile do
+              use GraphqlQuery, ignore: true
+
+              def query_from_file do
+                gql_from_file(unquote(file_path))
+              end
+            end
+          end
+
+        logs =
+          ExUnit.CaptureIO.capture_io(:stderr, fn ->
+            Code.compile_quoted(ast)
+          end)
+
+        # Should not have validation warnings due to global ignore
+        refute logs =~ "unused variable"
+        refute logs =~ "[GraphqlQuery]"
+
+        # But the query should still be resolved correctly
+        call_ast =
+          quote do
+            TestGlobalIgnoreGqlFromFile.query_from_file()
+          end
+
+        {query, _} = Code.eval_quoted(call_ast)
+        assert %Document{query: result} = query
+        assert result =~ "query GetUser($unused: String)"
+        assert result =~ "user {"
+        assert result =~ "id"
+        assert result =~ "name"
+      end)
+    end
+
+    test "global ignore suppresses compile-time warnings in ~GQL sigil" do
+      ast =
+        quote do
+          defmodule TestGlobalIgnoreSigil do
+            use GraphqlQuery, ignore: true
+
+            def query_with_unused_var do
+              ~GQL"""
+              query GetUser($unused: String) {
+                user {
+                  id
+                  name
+                }
+              }
+              """
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Should not have validation warnings due to global ignore
+      refute logs =~ "unused variable"
+      refute logs =~ "[GraphqlQuery]"
+
+      # But the query should still be resolved correctly
+      call_ast =
+        quote do
+          TestGlobalIgnoreSigil.query_with_unused_var()
+        end
+
+      {query, _} = Code.eval_quoted(call_ast)
+      assert %Document{query: result} = query
+      assert result =~ "query GetUser($unused: String)"
+      assert result =~ "user {"
+      assert result =~ "id"
+      assert result =~ "name"
+    end
+
+    test "global ignore works with document_with_options" do
+      ast =
+        quote do
+          defmodule TestGlobalIgnoreDocumentWithOptions do
+            use GraphqlQuery, ignore: true
+
+            def query_with_document_options do
+              document_with_options type: :query do
+                gql """
+                query GetUser($unused: String) {
+                  user {
+                    id
+                    name
+                  }
+                }
+                """
+              end
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Should not have validation warnings due to global ignore
+      refute logs =~ "unused variable"
+      refute logs =~ "[GraphqlQuery]"
+
+      # Query should still work correctly
+      call_ast =
+        quote do
+          TestGlobalIgnoreDocumentWithOptions.query_with_document_options()
+        end
+
+      {query, _} = Code.eval_quoted(call_ast)
+      assert %Document{query: result} = query
+      assert result =~ "query GetUser($unused: String)"
+      assert result =~ "user {"
+      assert result =~ "id"
+      assert result =~ "name"
+    end
+
+    test "local options if they can be read take precedence over global ignore" do
+      ast =
+        quote do
+          defmodule TestGlobalIgnorePrecedence do
+            use GraphqlQuery, ignore: true
+
+            def query_with_local_options do
+              gql [ignore: false], """
+              query GetUser($unused: String) {
+                user {
+                  id
+                  name
+                }
+              }
+              """
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Global ignore should take precedence, so no validation warnings
+      assert logs =~ "unused variable"
+    end
+  end
+
+  describe "global runtime option" do
+    test "global runtime defers validation to runtime in gql macro" do
+      ast =
+        quote do
+          defmodule TestGlobalRuntimeGql do
+            use GraphqlQuery, runtime: true
+
+            def query_with_unused_var do
+              gql """
+              query GetUser($unused: String) {
+                user {
+                  id
+                  name
+                  unknown_field
+                }
+              }
+              """
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Should not have compile-time warnings due to global runtime
+      refute logs =~ "unused variable"
+      refute logs =~ "unknown_field"
+      refute logs =~ "[GraphqlQuery]"
+
+      # But runtime validation should catch the errors
+      call_ast =
+        quote do
+          TestGlobalRuntimeGql.query_with_unused_var()
+        end
+
+      {query, logs} =
+        ExUnit.CaptureLog.with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      # Should have runtime validation warnings
+      assert logs =~ "unused variable"
+      # Note: unknown_field warnings would require a schema to be configured
+
+      assert %Document{query: result} = query
+      assert result =~ "query GetUser($unused: String)"
+      assert result =~ "unknown_field"
+    end
+
+    test "global runtime defers validation to runtime in gql_from_file macro" do
+      content = """
+      query GetUser($unused: String) {
+        user {
+          id
+          name
+          unknown_field
+        }
+      }
+      """
+
+      with_tmp_file(content, fn file_path ->
+        ast =
+          quote do
+            defmodule TestGlobalRuntimeGqlFromFile do
+              use GraphqlQuery, runtime: true
+
+              def query_from_file do
+                gql_from_file(unquote(file_path))
+              end
+            end
+          end
+
+        logs =
+          ExUnit.CaptureIO.capture_io(:stderr, fn ->
+            Code.compile_quoted(ast)
+          end)
+
+        # Should not have compile-time warnings due to global runtime
+        refute logs =~ "unused variable"
+        refute logs =~ "unknown_field"
+        refute logs =~ "[GraphqlQuery]"
+
+        # But runtime validation should catch the errors
+        call_ast =
+          quote do
+            TestGlobalRuntimeGqlFromFile.query_from_file()
+          end
+
+        {query, logs} =
+          with_log(fn ->
+            {query, _} = Code.eval_quoted(call_ast)
+            query
+          end)
+
+        # Should have runtime validation warnings
+        assert logs =~ "unused variable"
+
+        assert %Document{query: result} = query
+        assert result =~ "query GetUser($unused: String)"
+        assert result =~ "unknown_field"
+      end)
+    end
+
+    test "global runtime defers validation to runtime in ~GQL sigil" do
+      ast =
+        quote do
+          defmodule TestGlobalRuntimeSigil do
+            use GraphqlQuery, runtime: true
+
+            def query_with_unused_var do
+              ~GQL"""
+              query GetUser($unused: String) {
+                user {
+                  id
+                  name
+                  unknown_field
+                }
+              }
+              """
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Should not have compile-time warnings due to global runtime
+      refute logs =~ "unused variable"
+      refute logs =~ "unknown_field"
+      refute logs =~ "[GraphqlQuery]"
+
+      # But runtime validation should catch the errors
+      call_ast =
+        quote do
+          TestGlobalRuntimeSigil.query_with_unused_var()
+        end
+
+      {query, logs} =
+        ExUnit.CaptureLog.with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      # Should have runtime validation warnings
+      assert logs =~ "unused variable"
+
+      assert %Document{query: result} = query
+      assert result =~ "query GetUser($unused: String)"
+      assert result =~ "unknown_field"
+    end
+
+    test "global runtime works with document_with_options" do
+      ast =
+        quote do
+          defmodule TestGlobalRuntimeDocumentWithOptions do
+            use GraphqlQuery, runtime: true
+
+            def query_with_document_options do
+              document_with_options type: :query do
+                gql """
+                query GetUser($unused: String) {
+                  user {
+                    id
+                    name
+                    unknown_field
+                  }
+                }
+                """
+              end
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Should not have compile-time warnings due to global runtime
+      refute logs =~ "unused variable"
+      refute logs =~ "unknown_field"
+      refute logs =~ "[GraphqlQuery]"
+
+      # But runtime validation should catch the errors
+      call_ast =
+        quote do
+          TestGlobalRuntimeDocumentWithOptions.query_with_document_options()
+        end
+
+      {query, logs} =
+        ExUnit.CaptureLog.with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      # Should have runtime validation warnings
+      assert logs =~ "unused variable"
+
+      assert %Document{query: result} = query
+      assert result =~ "query GetUser($unused: String)"
+      assert result =~ "unknown_field"
+    end
+
+    test "if local options can be read, takes preference over global options" do
+      ast =
+        quote do
+          defmodule TestGlobalRuntimePrecedence do
+            use GraphqlQuery, runtime: true
+
+            def query_with_local_options do
+              gql [runtime: false], """
+              query GetUser($unused: String) {
+                user {
+                  id
+                  name
+                }
+              }
+              """
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Global runtime should take precedence, so no compile-time validation warnings
+      assert logs =~ "unused variable"
+      assert logs =~ "[GraphqlQuery]"
+
+      # But runtime validation should still occur
+      call_ast =
+        quote do
+          TestGlobalRuntimePrecedence.query_with_local_options()
+        end
+
+      {query, logs} =
+        ExUnit.CaptureLog.with_log(fn ->
+          {query, _} = Code.eval_quoted(call_ast)
+          query
+        end)
+
+      # Should have runtime validation warnings
+      refute logs =~ "unused variable"
+      assert %Document{query: result} = query
+      assert result =~ "query GetUser($unused: String)"
     end
   end
 
