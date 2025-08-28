@@ -34,6 +34,12 @@ defmodule GraphqlQuery.MacroOptions do
                    default: [],
                    required: false,
                    doc: "List of fragments to include in the query"
+                 ],
+                 format: [
+                   type: :boolean,
+                   default: false,
+                   required: false,
+                   doc: "Apply formatting when converting to string"
                  ]
 
   @moduledoc """
@@ -62,7 +68,8 @@ defmodule GraphqlQuery.MacroOptions do
           schema: module() | nil,
           evaluate: boolean() | nil,
           runtime: boolean() | nil,
-          fragments: list(GraphqlQuery.Fragment.t())
+          fragments: list(GraphqlQuery.Fragment.t()),
+          format: boolean() | nil
         }
 
   @doc """

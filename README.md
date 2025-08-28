@@ -60,7 +60,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
   - `gql_from_file` for file-based queries
   - `gql` macro for dynamic queries
   - `document_with_options` for applying options to multiple macros
-- ✅ **Query formatting** with consistent indentation
+- ✅ **Query formatting** with consistent indentation and automatic formatting option
 - ✅ **Mix format integration** for `~GQL` sigil, `.graphql` and `.gql` files
 - ✅ **Schema modules** with automatic recompilation on schema changes
 - ✅ **Absinthe schema integration** for validating queries against existing Absinthe schemas
@@ -231,6 +231,7 @@ query GetUser($id: ID!) {
   - `type: :query | :schema | :fragment` → Specify if the content shall be validated as query, schema or fragment
   - `schema: SchemaModule` → Specify the schema module to validate the query or fragment with
   - `fragments: [GraphqlQuery.Fragment.t()]` → Add reusable fragments to queries
+  - `format: true` → Apply automatic formatting when converting to string
 
 Example project structure:
 
@@ -274,6 +275,7 @@ end
   - `type: :query | :schema | :fragment` → Specify if the content shall be validated as query, schema or fragment
   - `schema: SchemaModule` → Specify the schema module to validate the query or fragment with
   - `fragments: [GraphqlQuery.Fragment.t()]` → Add reusable fragments to queries
+  - `format: true` → Apply automatic formatting when converting to string
 
 ```elixir
 defmodule Example do
@@ -319,6 +321,20 @@ defmodule Example do
       user(id: #{user_id}) { name }
     }
     """
+  end
+
+  # Automatic formatting when converting to string
+  def formatted_query do
+    gql [format: true], """
+    query{user{id name}}
+    """
+    # When converted to string, will be properly formatted:
+    # query {
+    #   user {
+    #     id
+    #     name
+    #   }
+    # }
   end
 end
 ```

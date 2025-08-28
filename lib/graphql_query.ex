@@ -23,6 +23,7 @@ defmodule GraphqlQuery do
     * `:ignore` - Whether to ignore validation errors (default: false)
     * `:evaluate` - Whether to try evaluating dynamic parts at compile time (default: false)
     * `:fragments` - List of fragments to include in queries (default: [])
+    * `:format` - Whether to apply formatting when converting to string (default: false)
 
   ## Examples
 
@@ -57,6 +58,7 @@ defmodule GraphqlQuery do
     Module.put_attribute(module, :__graphql_query__evaluate, opts.evaluate)
     Module.put_attribute(module, :__graphql_query__schema, schema)
     Module.put_attribute(module, :__graphql_query__fragments, opts.fragments)
+    Module.put_attribute(module, :__graphql_query__format, opts.format)
 
     quote do
       import GraphqlQuery
@@ -91,6 +93,7 @@ defmodule GraphqlQuery do
     * `:evaluate` - Try to expand function calls at compile time (default: false)
     * `:schema` - Schema module for validation (default: module schema if set)
     * `:fragments` - List of fragments to include (default: [])
+    * `:format` - Apply formatting when converting to string (default: false)
 
   ## Option Precedence
 
@@ -327,8 +330,21 @@ defmodule GraphqlQuery do
   defmacro gql_from_file(file_path, opts \\ [])
 
   defmacro gql_from_file(file_path, {:runtime, opts}) do
-    Module.put_attribute(__CALLER__.module, :external_resource, file_path)
     caller = __CALLER__
+
+    file_path =
+      case expand_until_string(file_path, caller, true) do
+        {:ok, file_path} ->
+          Module.put_attribute(caller.module, :external_resource, file_path)
+          file_path
+
+        {:error, _error} ->
+          file_path
+
+        :error ->
+          file_path
+      end
+
     warn_location = [file: file_path]
     module_opts = get_module_opts(caller)
 
@@ -339,6 +355,20 @@ defmodule GraphqlQuery do
 
   defmacro gql_from_file(file_path, opts) do
     caller = __CALLER__
+
+    file_path =
+      case expand_until_string(file_path, caller, true) do
+        {:ok, file_path} ->
+          file_path
+
+        {:error, error} ->
+          raise ArgumentError,
+                "The file path for gql_from_file/2 must be a string or a module attribute containing a string. Got: #{inspect(error)}"
+
+        :error ->
+          file_path
+      end
+
     warn_location = [file: file_path]
 
     case validate_options(opts, caller) do
@@ -366,6 +396,7 @@ defmodule GraphqlQuery do
     type = get_option(opts, :type, :query, caller)
     schema_module = get_schema_module(opts, caller)
     fragments = get_option(opts, :fragments, [], caller)
+    format = get_option(opts, :format, false, caller)
 
     contents = File.read!(file_path)
 
@@ -377,7 +408,8 @@ defmodule GraphqlQuery do
       schema: schema_module,
       fragments: fragments,
       ignore?: ignore?,
-      location: warn_location
+      location: warn_location,
+      format: format
     ]
 
     cond do
@@ -409,6 +441,7 @@ defmodule GraphqlQuery do
     * `:evaluate` - Try to expand function calls at compile time (default: false)
     * `:schema` - Schema module for validation (default: module schema if set)
     * `:fragments` - List of fragments to include (default: [])
+    * `:format` - Apply formatting when converting to string (default: false)
 
   ## Examples
 
@@ -544,6 +577,7 @@ defmodule GraphqlQuery do
     type = get_option(opts, :type, :query, caller)
 
     fragments = get_option(opts, :fragments, [], caller)
+    format = get_option(opts, :format, false, caller)
 
     {static_parts, dynamic_parts} =
       Enum.map_reduce(parts, [], fn
@@ -577,7 +611,8 @@ defmodule GraphqlQuery do
       schema: schema_module,
       fragments: fragments,
       ignore?: ignore?,
-      location: warn_location
+      location: warn_location,
+      format: format
     ]
 
     module_opts = get_module_opts(caller)
@@ -736,6 +771,7 @@ defmodule GraphqlQuery do
     type = opts[:type]
     schema_module = opts[:schema]
     fragments = opts[:fragments]
+    format = opts[:format]
 
     query_opts = [
       path: file,
@@ -743,7 +779,8 @@ defmodule GraphqlQuery do
       schema: schema_module,
       fragments: fragments,
       ignore?: ignore?,
-      location: warn_location
+      location: warn_location,
+      format: format
     ]
 
     cond do
@@ -782,7 +819,8 @@ defmodule GraphqlQuery do
     {:evaluate, false},
     {:type, :query},
     {:schema, nil},
-    {:fragments, []}
+    {:fragments, []},
+    {:format, false}
   ]
 
   def runtime_options(macro_opts, module_opts) do
@@ -991,7 +1029,8 @@ defmodule GraphqlQuery do
       schema:
         get_module_attribute(caller.module, :__graphql_query__schema, nil)
         |> ensure_module_loaded!(caller),
-      fragments: get_module_attribute(caller.module, :__graphql_query__fragments, [])
+      fragments: get_module_attribute(caller.module, :__graphql_query__fragments, []),
+      format: get_module_attribute(caller.module, :__graphql_query__format, false)
     ]
   end
 
@@ -1014,7 +1053,8 @@ defmodule GraphqlQuery do
         schema: opts[:schema],
         fragments: opts[:fragments],
         ignore?: opts[:ignore],
-        location: unquote(warn_location)
+        location: unquote(warn_location),
+        format: opts[:format]
       ]
 
       query = Document.new(calculated_query, query_opts)
@@ -1208,7 +1248,7 @@ defmodule GraphqlQuery do
 
   defp do_validate_options(_other, _caller), do: {:error, :unknown_options, :opts}
 
-  @single_options [:ignore, :runtime, :evaluate, :type]
+  @single_options [:ignore, :runtime, :evaluate, :type, :format]
 
   defp validate_option_value(k, {_, _, _} = ast, caller) when k in @single_options do
     case expand_and_evaluate(ast, caller, true) do

@@ -24,7 +24,8 @@ defmodule MyApp.Queries do
     runtime: false,
     ignore: false,
     evaluate: false,
-    fragments: []
+    fragments: [],
+    format: false
 end
 ```
 {: .wrap}
@@ -246,6 +247,9 @@ query = gql_from_file("priv/queries/get_user.graphql", ignore: true)
 
 # Runtime validation
 query = gql_from_file("priv/queries/get_user.graphql", runtime: true)
+
+# Apply formatting when transformed to string
+query = gql_from_file("priv/queries/get_user.graphql", format: true)
 ```
 {: .wrap}
 
@@ -313,6 +317,9 @@ query = gql [ignore: true], ""
 
 # Runtime validation
 query = gql [runtime: true], ""
+
+# Apply automatic formatting when transforming to string
+query = gql [format: true], "query{user{id name}}"
 ```
 {: .wrap}
 
@@ -340,6 +347,77 @@ end
 ```
 {: .wrap}
 
+## JSON encoding
+{: .col-2}
+
+### With Jason
+
+```elixir
+# All macros return a GraphqlDocument struct that implements Jason.Encoder
+query = ~GQL"..."
+
+Jason.encode!(query)
+
+# {"query": "...", "variables": {}}
+
+# You can add fragments or variables!
+
+query
+|> GraphqlQuery.Document.add_fragment(fragment)
+|> GraphqlQuery.Document.add_variables(id: 123, sort: :ASC)
+|> Jason.encode!()
+
+# {"query": "... with fragment if used", "variables": {"id": 123, "sort": "ASC"}}
+```
+{: .wrap}
+
+### With JSON (Elixir >= 1.18)
+
+```elixir
+# Just like Jason, it implements JSON.Encoder too and support the same features
+query = ~GQL"..."
+
+JSON.encode!(query)
+
+# {"query": "...", "variables": {}}
+```
+{: .wrap}
+
+
+## to_string
+{: .col-2}
+
+### Transform a document to string
+
+``` elixir
+# GraphqlQuery.Document and GraphqlQuery.Fragment implements `to_string`, so you can do:
+# it returns the query with the needed fragments
+query = ~GQL"..."
+
+to_string(query)
+
+"#{query}"
+```
+{: .wrap}
+
+### Format when doing to_string
+
+``` elixir
+# GQL sigil content is formatted automatically with mix format
+# But other macros are not, if you want to format the content when
+# doing to_string, you have the `format` option
+# this is useful specially on testing
+query = gql [format: true], ""
+fragment = gql_from_document "", [format: true]
+
+
+# Now it will format the content correctly!
+to_string(query)
+"#{fragment}"
+# Even when encoding to JSON
+Jason.encode!(query)
+```
+{: .wrap}
 
 ## Full example!
 
