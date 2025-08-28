@@ -39,7 +39,7 @@ defmodule GraphqlQuery do
     caller = __CALLER__
     module = caller.module
     schema = opts[:schema]
-    {:ok, opts} = validate_options!(opts, caller)
+    {:ok, opts} = validate_options(opts, caller)
     opts = GraphqlQuery.MacroOptions.validate!(opts)
 
     if schema do
@@ -183,7 +183,7 @@ defmodule GraphqlQuery do
     warn_location = warn_location([], caller)
 
     opts =
-      case validate_options!(opts, caller) do
+      case validate_options(opts, caller) do
         {:ok, opts} ->
           opts
 
@@ -341,7 +341,7 @@ defmodule GraphqlQuery do
     caller = __CALLER__
     warn_location = [file: file_path]
 
-    case validate_options!(opts, caller) do
+    case validate_options(opts, caller) do
       {:ok, opts} ->
         do_gql_from_file(file_path, opts, caller)
 
@@ -442,7 +442,7 @@ defmodule GraphqlQuery do
     caller = __CALLER__
     warn_location = warn_location([], caller)
 
-    case validate_options!(opts, caller) do
+    case validate_options(opts, caller) do
       {:ok, opts} ->
         ignore? = get_option(opts, :ignore, false, caller)
         runtime_validation? = get_option(opts, :runtime, false, caller)
@@ -491,7 +491,7 @@ defmodule GraphqlQuery do
     # String with dynamic parts
     caller = __CALLER__
 
-    case validate_options!(opts, caller) do
+    case validate_options(opts, caller) do
       {:ok, opts} ->
         do_gql(original, parts, caller, meta, opts)
 
@@ -513,7 +513,7 @@ defmodule GraphqlQuery do
     # Method or module attribute call
     caller = __CALLER__
 
-    case validate_options!(opts, caller) do
+    case validate_options(opts, caller) do
       {:ok, opts} ->
         do_gql(ast, [ast], caller, meta, opts)
 
@@ -1158,33 +1158,40 @@ defmodule GraphqlQuery do
     end
   end
 
-  defp validate_options!(opts, caller) do
-    cond do
-      global_ignore?(caller) ->
-        opts = merge_extra_opts(opts, {:runtime, [ignore: true]})
-        {:ignore, opts}
+  defp validate_options(opts, caller) do
+    case do_validate_options(opts, caller) do
+      {:ok, opts} ->
+        GraphqlQuery.MacroOptions.validate!(opts)
+        {:ok, opts}
 
-      global_runtime?(caller) ->
-        opts = merge_extra_opts(opts, {:runtime, []})
+      {:error, error, field} ->
+        cond do
+          global_ignore?(caller) ->
+            opts = merge_extra_opts(opts, {:runtime, [ignore: true]})
+            {:ignore, opts}
 
-        {:runtime, opts}
+          global_runtime?(caller) ->
+            opts = merge_extra_opts(opts, {:runtime, []})
 
-      true ->
-        do_validate_options!(opts, caller)
+            {:runtime, opts}
+
+          true ->
+            {:error, error, field}
+        end
     end
   end
 
-  defp do_validate_options!({:@, _, [{name, _, _}]}, caller) do
-    get_module_attribute(caller.module, name) |> do_validate_options!(caller)
+  defp do_validate_options({:@, _, [{name, _, _}]}, caller) do
+    get_module_attribute(caller.module, name) |> do_validate_options(caller)
   end
 
-  defp do_validate_options!({_, _, _}, _) do
+  defp do_validate_options({_, _, _}, _) do
     {:error, :runtime, :opts}
   end
 
-  defp do_validate_options!(nil, _), do: {:ok, []}
+  defp do_validate_options(nil, _), do: {:ok, []}
 
-  defp do_validate_options!(options, caller) when is_list(options) do
+  defp do_validate_options(options, caller) when is_list(options) do
     Enum.reduce_while(options, {:ok, []}, fn {k, v}, {:ok, acc} ->
       case validate_option_value(k, v, caller) do
         {:error, reason} ->
@@ -1197,17 +1204,9 @@ defmodule GraphqlQuery do
           {:cont, {:ok, Keyword.put(acc, k, valid_value)}}
       end
     end)
-    |> case do
-      {:ok, opts} ->
-        GraphqlQuery.MacroOptions.validate!(opts)
-        {:ok, opts}
-
-      other ->
-        other
-    end
   end
 
-  defp do_validate_options!(_other, _caller), do: {:error, :unknown_options, :opts}
+  defp do_validate_options(_other, _caller), do: {:error, :unknown_options, :opts}
 
   @single_options [:ignore, :runtime, :evaluate, :type]
 

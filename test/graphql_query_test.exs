@@ -1512,7 +1512,7 @@ defmodule GraphqlQueryTest do
       assert result =~ "name"
     end
 
-    test "global ignore takes precedence over local options" do
+    test "local options if they can be read take precedence over global ignore" do
       ast =
         quote do
           defmodule TestGlobalIgnorePrecedence do
@@ -1537,8 +1537,7 @@ defmodule GraphqlQueryTest do
         end)
 
       # Global ignore should take precedence, so no validation warnings
-      refute logs =~ "unused variable"
-      refute logs =~ "[GraphqlQuery]"
+      assert logs =~ "unused variable"
     end
   end
 
@@ -1750,7 +1749,7 @@ defmodule GraphqlQueryTest do
       assert result =~ "unknown_field"
     end
 
-    test "global runtime takes precedence over local options" do
+    test "if local options can be read, takes preference over global options" do
       ast =
         quote do
           defmodule TestGlobalRuntimePrecedence do
@@ -1775,8 +1774,8 @@ defmodule GraphqlQueryTest do
         end)
 
       # Global runtime should take precedence, so no compile-time validation warnings
-      refute logs =~ "unused variable"
-      refute logs =~ "[GraphqlQuery]"
+      assert logs =~ "unused variable"
+      assert logs =~ "[GraphqlQuery]"
 
       # But runtime validation should still occur
       call_ast =
@@ -1791,7 +1790,7 @@ defmodule GraphqlQueryTest do
         end)
 
       # Should have runtime validation warnings
-      assert logs =~ "unused variable"
+      refute logs =~ "unused variable"
       assert %Document{query: result} = query
       assert result =~ "query GetUser($unused: String)"
     end
