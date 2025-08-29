@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.3.7]
+
 ### Added
 - `format` option for automatic query formatting when doing `to_string`
 
