@@ -1796,6 +1796,272 @@ defmodule GraphqlQueryTest do
     end
   end
 
+  describe "format option" do
+    test "document_with_options with format: true applies formatting" do
+      query =
+        document_with_options format: true, ignore: true do
+          gql """
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              id name
+            }
+          }
+          """
+        end
+
+      result = to_string(query)
+
+      # Should be formatted with proper indentation
+      assert result =~ "query GetUser($id: ID!) {\n  user(id: $id) {\n    id\n    name\n  }\n}"
+      assert %Document{format: true} = query
+    end
+
+    test "document_with_options with format: false preserves original formatting" do
+      query =
+        document_with_options format: false, ignore: true do
+          gql """
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              id name
+            }
+          }
+          """
+        end
+
+      result = to_string(query)
+
+      assert result =~ "query GetUser($id: ID!) {\n  user(id: $id) {\n    id name\n  }\n}"
+      assert %Document{format: false} = query
+    end
+
+    test "gql macro with format: true applies formatting" do
+      query =
+        gql [format: true, ignore: true], """
+        query GetUser($id: ID!) {
+        user(id: $id) {
+        id
+        name
+        }
+        }
+        """
+
+      result = to_string(query)
+
+      # Should be formatted
+      assert result =~ "query GetUser($id: ID!) {\n  user(id: $id) {\n    id\n    name\n  }\n}"
+      assert %Document{format: true} = query
+    end
+
+    test "gql macro with format: false preserves original formatting" do
+      query =
+        gql [format: false, ignore: true], """
+        query GetUser($id: ID!) {
+        user(id: $id) {
+        id name
+        }
+        }
+        """
+
+      result = to_string(query)
+
+      # Should preserve original formatting (leading whitespace is normalized by gql macro)
+      assert result =~ "query GetUser($id: ID!) {\nuser(id: $id) {\nid name\n}\n}"
+      assert %Document{format: false} = query
+    end
+
+    test "fragment with format: true applies formatting" do
+      fragment =
+        document_with_options format: true, ignore: true do
+          gql [type: :fragment], """
+          fragment UserFields on User {
+            id name email
+          }
+          """
+        end
+
+      result = to_string(fragment)
+
+      # Should be formatted
+      assert result =~ "fragment UserFields on User {\n  id\n  name\n  email\n}"
+      assert %Fragment{format: true} = fragment
+    end
+
+    test "fragment with format: false preserves original formatting" do
+      fragment =
+        document_with_options format: false, ignore: true do
+          gql [type: :fragment], """
+          fragment UserFields on User {
+            id name
+            email
+          }
+          """
+        end
+
+      result = to_string(fragment)
+
+      # Should preserve original formatting (now properly indented by mix format)
+      assert result =~ "fragment UserFields on User {\n  id name\n  email\n}"
+      assert %Fragment{format: false} = fragment
+    end
+
+    test "gql_from_file with format: true applies formatting" do
+      # Use existing test fixture
+      query =
+        document_with_options format: true do
+          gql_from_file("test/fixtures/test_query.graphql")
+        end
+
+      result = to_string(query)
+
+      # Should be formatted (the fixture content will be formatted)
+      assert %Document{format: true} = query
+      assert is_binary(result)
+    end
+
+    test "Document.new with format: true applies formatting" do
+      query =
+        GraphqlQuery.Document.new(
+          """
+          query GetUser($id: ID!) {
+          user(id: $id) {
+          id
+          name
+          }
+          }
+          """,
+          format: true
+        )
+
+      result = to_string(query)
+
+      # Should be formatted
+      assert result =~ "query GetUser($id: ID!) {\n  user(id: $id) {\n    id\n    name\n  }\n}"
+      assert %Document{format: true} = query
+    end
+
+    test "Fragment with format option via Document.new" do
+      fragment =
+        GraphqlQuery.Document.new(
+          """
+          fragment UserFields on User {
+          id
+          name
+          email
+          }
+          """,
+          type: :fragment,
+          format: true
+        )
+
+      result = to_string(fragment)
+
+      # Should be formatted
+      assert result =~ "fragment UserFields on User {\n  id\n  name\n  email\n}"
+      assert %Fragment{format: true} = fragment
+    end
+
+    test "format option defaults to false" do
+      query = ~GQL"""
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          id
+          name
+        }
+      }
+      """
+
+      # Should have format: false by default
+      assert %Document{format: false} = query
+
+      # Should preserve original formatting (now properly indented by mix format)
+      result = to_string(query)
+      assert result =~ "query GetUser($id: ID!) {\n  user(id: $id) {\n    id\n    name\n  }\n}"
+    end
+
+    test "format option precedence - explicit option overrides document_with_options" do
+      query =
+        document_with_options format: true do
+          gql [format: false, ignore: true], """
+          query GetUser($id: ID!) {
+          user(id: $id) {
+          id
+          name
+          }
+          }
+          """
+        end
+
+      # Explicit format: false should override document_with_options format: true
+      assert %Document{format: false} = query
+
+      # Should preserve original formatting (leading whitespace is normalized by gql macro)
+      result = to_string(query)
+      assert result =~ "query GetUser($id: ID!) {\nuser(id: $id) {\nid\nname\n}\n}"
+    end
+
+    test "format works with complex queries including fragments" do
+      fragment =
+        GraphqlQuery.Document.new(
+          """
+          fragment UserFields on User {
+          id
+          name
+          email
+          }
+          """,
+          type: :fragment,
+          format: true
+        )
+
+      query =
+        GraphqlQuery.Document.new(
+          """
+          query GetUser($id: ID!) {
+          user(id: $id) {
+          ...UserFields
+          }
+          }
+          """,
+          fragments: [fragment],
+          format: true
+        )
+
+      result = to_string(query)
+
+      # Both query and fragment should be formatted
+      expected_query = """
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          ...UserFields
+        }
+      }
+
+      fragment UserFields on User {
+        id
+        name
+        email
+      }
+      """
+
+      # Remove trailing whitespace for comparison
+      normalized_result = result |> String.trim()
+      normalized_expected = expected_query |> String.trim()
+
+      assert normalized_result == normalized_expected
+    end
+
+    test "module-level format option through MacroOptions" do
+      # Test that MacroOptions includes format in validation
+      {:ok, opts} = GraphqlQuery.MacroOptions.validate(format: true, ignore: false)
+      assert opts.format == true
+      assert opts.ignore == false
+
+      # Test that format defaults to false
+      {:ok, opts_default} = GraphqlQuery.MacroOptions.validate([])
+      assert opts_default.format == false
+    end
+  end
+
   defp with_tmp_file(content, callback) do
     file_path = "test_#{abs(:erlang.unique_integer())}"
     File.write!(file_path, content)

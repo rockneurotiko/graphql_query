@@ -70,7 +70,8 @@ defmodule GraphqlQuery.Document do
     :type,
     :document_info,
     :ignore?,
-    :location
+    :location,
+    :format
   ]
 
   @type t :: %__MODULE__{
@@ -83,7 +84,8 @@ defmodule GraphqlQuery.Document do
           type: :query | :schema,
           document_info: DocumentInfo.t() | nil,
           ignore?: boolean(),
-          location: keyword() | nil
+          location: keyword() | nil,
+          format: boolean()
         }
 
   @type document :: t() | Fragment.t()
@@ -95,7 +97,8 @@ defmodule GraphqlQuery.Document do
           {:fragments, list(Fragment.t())},
           {:name, String.t() | nil},
           {:ignore?, boolean() | nil},
-          {:location, keyword() | nil}
+          {:location, keyword() | nil},
+          {:format, boolean() | nil}
         ]
   @spec new(String.t(), new_options()) :: document()
   @doc "Create a new GraphQL document or fragment from a document string and options."
@@ -106,6 +109,7 @@ defmodule GraphqlQuery.Document do
     fragments = Keyword.get(opts, :fragments, [])
     ignore? = Keyword.get(opts, :ignore?, false)
     location = Keyword.get(opts, :location, nil)
+    format = Keyword.get(opts, :format, false)
 
     # name = Keyword.get(opts, :name, Signature.signature(query))
 
@@ -119,7 +123,8 @@ defmodule GraphqlQuery.Document do
         path: path,
         type: type,
         ignore?: ignore?,
-        location: location
+        location: location,
+        format: format
       }
 
     if type == :fragment do
@@ -277,7 +282,6 @@ defmodule GraphqlQuery.Document do
       fragments
       |> filter_used_fragments(document)
       |> Enum.map_join("\n", &Kernel.to_string/1)
-      |> String.trim()
 
     [String.trim(query), fragments_string]
     |> Enum.reject(&(&1 == ""))
@@ -368,6 +372,11 @@ defmodule GraphqlQuery.Document do
   # protocols implementation
   defimpl String.Chars do
     @doc "Convert a GraphQL query document to its string representation."
+    def to_string(%GraphqlQuery.Document{format: true} = gql_document) do
+      formatted_content = GraphqlQuery.Document.format_query_with_fragments(gql_document)
+      GraphqlQuery.Format.format(formatted_content)
+    end
+
     def to_string(%GraphqlQuery.Document{} = gql_document) do
       GraphqlQuery.Document.format_query_with_fragments(gql_document)
     end

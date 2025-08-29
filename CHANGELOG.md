@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `format` option for automatic query formatting when doing `to_string`
+
+### Changed
+- `gql_from_file` will try to expand the file_path before setting it in a module attribute
+
 ## [v0.3.6]
 
 ### Added
