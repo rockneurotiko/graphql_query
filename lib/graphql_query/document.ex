@@ -281,12 +281,12 @@ defmodule GraphqlQuery.Document do
     fragments_string =
       fragments
       |> filter_used_fragments(document)
-      |> Enum.map_join("\n", &Kernel.to_string/1)
-      |> String.trim()
+      |> Enum.map_join("\n\n", &Kernel.to_string/1)
 
     [String.trim(query), fragments_string]
     |> Enum.reject(&(&1 == ""))
-    |> Enum.join("\n")
+    |> Enum.join("\n\n")
+    |> Kernel.<>("\n")
   end
 
   defp filter_used_fragments(fragments, %{document_info: nil}), do: fragments
