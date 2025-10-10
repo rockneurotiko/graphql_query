@@ -545,6 +545,7 @@ defmodule GraphqlQuery.DocumentTest do
         query GetUser { user { id } }
         query GetPost { post { title } }
         """
+
         document = Document.new(query)
 
         json = Jason.encode!(document)
@@ -558,6 +559,7 @@ defmodule GraphqlQuery.DocumentTest do
         query GetUser { user { id } }
         mutation CreateUser { createUser(input: {name: "John"}) { id } }
         """
+
         document = Document.new(mixed_operations)
 
         json = Jason.encode!(document)
@@ -571,6 +573,7 @@ defmodule GraphqlQuery.DocumentTest do
         query { user { id } }
         query GetPost { post { title } }
         """
+
         document = Document.new(query)
 
         json = Jason.encode!(document)
@@ -584,6 +587,7 @@ defmodule GraphqlQuery.DocumentTest do
         query GetUser { user { id } }
         query GetPost { post { title } }
         """
+
         document =
           Document.new(query)
           |> Document.set_name("GetUser")
@@ -596,6 +600,7 @@ defmodule GraphqlQuery.DocumentTest do
 
       test "encodes operationName as null when set_name is nil (Jason)" do
         query = "query GetUser { user { id } }"
+
         document =
           Document.new(query)
           |> Document.set_name(nil)
@@ -608,6 +613,7 @@ defmodule GraphqlQuery.DocumentTest do
 
       test "encodes operationName as null when set_name is non-string (Jason)" do
         query = "query GetUser { user { id } }"
+
         document =
           Document.new(query)
           |> Document.set_name(123)
@@ -620,6 +626,7 @@ defmodule GraphqlQuery.DocumentTest do
 
       test "overrides auto-detected name with set_name (Jason)" do
         query = "query GetUser { user { id } }"
+
         document =
           Document.new(query)
           |> Document.set_name("CustomOperationName")
@@ -724,6 +731,7 @@ defmodule GraphqlQuery.DocumentTest do
         query GetUser { user { id } }
         query GetPost { post { title } }
         """
+
         document = Document.new(query)
 
         json = JSON.encode!(document)
@@ -737,6 +745,7 @@ defmodule GraphqlQuery.DocumentTest do
         query GetUser { user { id } }
         mutation CreateUser { createUser(input: {name: "John"}) { id } }
         """
+
         document = Document.new(mixed_operations)
 
         json = JSON.encode!(document)
@@ -750,6 +759,7 @@ defmodule GraphqlQuery.DocumentTest do
         query { user { id } }
         query GetPost { post { title } }
         """
+
         document = Document.new(query)
 
         json = JSON.encode!(document)
@@ -763,6 +773,7 @@ defmodule GraphqlQuery.DocumentTest do
         query GetUser { user { id } }
         query GetPost { post { title } }
         """
+
         document =
           Document.new(query)
           |> Document.set_name("GetUser")
@@ -775,6 +786,7 @@ defmodule GraphqlQuery.DocumentTest do
 
       test "encodes operationName as null when set_name is nil (JSON)" do
         query = "query GetUser { user { id } }"
+
         document =
           Document.new(query)
           |> Document.set_name(nil)
@@ -787,6 +799,7 @@ defmodule GraphqlQuery.DocumentTest do
 
       test "encodes operationName as null when set_name is non-string (JSON)" do
         query = "query GetUser { user { id } }"
+
         document =
           Document.new(query)
           |> Document.set_name(123)
@@ -799,6 +812,7 @@ defmodule GraphqlQuery.DocumentTest do
 
       test "overrides auto-detected name with set_name (JSON)" do
         query = "query GetUser { user { id } }"
+
         document =
           Document.new(query)
           |> Document.set_name("CustomOperationName")
