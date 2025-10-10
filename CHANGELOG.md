@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v0.3.8]
+### Added
 - Add `operationName` to json encoded data
 - Add `c` option in sigil to set it as compile check
 
