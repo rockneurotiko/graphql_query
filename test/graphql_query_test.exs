@@ -881,6 +881,29 @@ defmodule GraphqlQueryTest do
       assert logs =~ "Validation errors"
       assert logs =~ "syntax error: expected at least one Selection in Selection Set"
     end
+
+    test "sigil 'c' option forces compile-time validation even with runtime option" do
+      ast =
+        quote do
+          defmodule TestCompileTimeForced do
+            use GraphqlQuery, runtime: true
+
+            def query_with_c_option do
+              ~GQL"{}"c
+            end
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      # Should have compile-time warnings despite runtime: true being set at module level
+      assert logs =~ "warning"
+      assert logs =~ "Validation errors"
+      assert logs =~ "syntax error: expected at least one Selection in Selection Set"
+    end
   end
 
   describe "unresolvable options - runtime fallback" do

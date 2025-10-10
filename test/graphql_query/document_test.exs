@@ -499,6 +499,136 @@ defmodule GraphqlQuery.DocumentTest do
         assert parsed["query"] == "query { user { id } }"
         assert parsed["variables"] == %{}
       end
+
+      test "encodes operationName as null for unnamed queries (Jason)" do
+        query = "query { user { id name } }"
+        document = Document.new(query)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName for single named query (Jason)" do
+        query = "query GetUser { user { id name } }"
+        document = Document.new(query)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == "GetUser"
+      end
+
+      test "encodes operationName for single named mutation (Jason)" do
+        mutation = "mutation CreateUser { createUser(input: {name: \"John\"}) { id name } }"
+        document = Document.new(mutation)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == "CreateUser"
+      end
+
+      test "encodes operationName for single named subscription (Jason)" do
+        subscription = "subscription UserUpdates { userUpdated { id name } }"
+        document = Document.new(subscription)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == "UserUpdates"
+      end
+
+      test "encodes operationName as null for multiple named operations (Jason)" do
+        query = """
+        query GetUser { user { id } }
+        query GetPost { post { title } }
+        """
+        document = Document.new(query)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName as null for mixed operation types (Jason)" do
+        mixed_operations = """
+        query GetUser { user { id } }
+        mutation CreateUser { createUser(input: {name: "John"}) { id } }
+        """
+        document = Document.new(mixed_operations)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName as null when one operation is unnamed (Jason)" do
+        query = """
+        query { user { id } }
+        query GetPost { post { title } }
+        """
+        document = Document.new(query)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName using set_name selection (Jason)" do
+        query = """
+        query GetUser { user { id } }
+        query GetPost { post { title } }
+        """
+        document =
+          Document.new(query)
+          |> Document.set_name("GetUser")
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == "GetUser"
+      end
+
+      test "encodes operationName as null when set_name is nil (Jason)" do
+        query = "query GetUser { user { id } }"
+        document =
+          Document.new(query)
+          |> Document.set_name(nil)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName as null when set_name is non-string (Jason)" do
+        query = "query GetUser { user { id } }"
+        document =
+          Document.new(query)
+          |> Document.set_name(123)
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "overrides auto-detected name with set_name (Jason)" do
+        query = "query GetUser { user { id } }"
+        document =
+          Document.new(query)
+          |> Document.set_name("CustomOperationName")
+
+        json = Jason.encode!(document)
+        parsed = Jason.decode!(json)
+
+        assert parsed["operationName"] == "CustomOperationName"
+      end
     end
   end
 
@@ -547,6 +677,136 @@ defmodule GraphqlQuery.DocumentTest do
 
         assert parsed["query"] == "query { user { id } }"
         assert parsed["variables"] == %{}
+      end
+
+      test "encodes operationName as null for unnamed queries (JSON)" do
+        query = "query { user { id name } }"
+        document = Document.new(query)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName for single named query (JSON)" do
+        query = "query GetUser { user { id name } }"
+        document = Document.new(query)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == "GetUser"
+      end
+
+      test "encodes operationName for single named mutation (JSON)" do
+        mutation = "mutation CreateUser { createUser(input: {name: \"John\"}) { id name } }"
+        document = Document.new(mutation)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == "CreateUser"
+      end
+
+      test "encodes operationName for single named subscription (JSON)" do
+        subscription = "subscription UserUpdates { userUpdated { id name } }"
+        document = Document.new(subscription)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == "UserUpdates"
+      end
+
+      test "encodes operationName as null for multiple named operations (JSON)" do
+        query = """
+        query GetUser { user { id } }
+        query GetPost { post { title } }
+        """
+        document = Document.new(query)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName as null for mixed operation types (JSON)" do
+        mixed_operations = """
+        query GetUser { user { id } }
+        mutation CreateUser { createUser(input: {name: "John"}) { id } }
+        """
+        document = Document.new(mixed_operations)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName as null when one operation is unnamed (JSON)" do
+        query = """
+        query { user { id } }
+        query GetPost { post { title } }
+        """
+        document = Document.new(query)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName using set_name selection (JSON)" do
+        query = """
+        query GetUser { user { id } }
+        query GetPost { post { title } }
+        """
+        document =
+          Document.new(query)
+          |> Document.set_name("GetUser")
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == "GetUser"
+      end
+
+      test "encodes operationName as null when set_name is nil (JSON)" do
+        query = "query GetUser { user { id } }"
+        document =
+          Document.new(query)
+          |> Document.set_name(nil)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "encodes operationName as null when set_name is non-string (JSON)" do
+        query = "query GetUser { user { id } }"
+        document =
+          Document.new(query)
+          |> Document.set_name(123)
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == nil
+      end
+
+      test "overrides auto-detected name with set_name (JSON)" do
+        query = "query GetUser { user { id } }"
+        document =
+          Document.new(query)
+          |> Document.set_name("CustomOperationName")
+
+        json = JSON.encode!(document)
+        parsed = JSON.decode!(json)
+
+        assert parsed["operationName"] == "CustomOperationName"
       end
     end
   end
