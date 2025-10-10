@@ -50,12 +50,12 @@ defmodule GraphqlQuery.Document do
 
       # Convert to string or encode as JSON
       iex> fragment = GraphqlQuery.Document.new("fragment UserFragment on User { id name }", name: "UserFragment", type: :fragment)
-      iex> query = GraphqlQuery.Document.new("query User(userId: ID!) { user(id: $userId) { ...UserFragment } }", fragments: [fragment])
+      iex> query = GraphqlQuery.Document.new("query User($userId: ID!) { user(id: $userId) { ...UserFragment } }", fragments: [fragment])
       iex> query = GraphqlQuery.Document.add_variable(query, :userId, 1)
       iex> to_string(query)   # String representation
-      "query User(userId: ID!) { user(id: $userId) { ...UserFragment } }\\nfragment UserFragment on User { id name }"
+      "query User($userId: ID!) { user(id: $userId) { ...UserFragment } }\\nfragment UserFragment on User { id name }"
       iex> query |> Jason.encode!() |> Jason.decode!()   # JSON encoding (works with Jason and JSON libraries)
-      %{"query" => "query User(userId: ID!) { user(id: $userId) { ...UserFragment } }\\nfragment UserFragment on User { id name }", "variables" => %{"userId" => 1}}
+      %{"query" => "query User($userId: ID!) { user(id: $userId) { ...UserFragment } }\\nfragment UserFragment on User { id name }", "variables" => %{"userId" => 1}, "operationName" => "User"}
   """
 
   alias GraphqlQuery.{DocumentInfo, Fragment, Signature, Validator}
@@ -342,7 +342,7 @@ defmodule GraphqlQuery.Document do
       @doc "Encode a GraphQL query document into JSON format."
       def encode(gql_query, encoder) do
         query = to_string(gql_query)
-        kv = [query: query, variables: gql_query.variables]
+        kv = [query: query, variables: gql_query.variables, operationName: gql_query.name]
 
         {io, _prefix} =
           Enum.flat_map_reduce(kv, ?{, fn {field, value}, prefix ->
@@ -362,7 +362,7 @@ defmodule GraphqlQuery.Document do
       @doc "Encode a GraphQL query document into JSON format."
       def encode(gql_query, opts) do
         query = to_string(gql_query)
-        kv = [query: query, variables: gql_query.variables]
+        kv = [query: query, variables: gql_query.variables, operationName: gql_query.name]
 
         Jason.Encode.keyword(kv, opts)
       end

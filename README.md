@@ -410,7 +410,7 @@ Example with [`Req`](https://github.com/wojtekmach/req) and [`GraphQLZero` mock 
 
 ```elixir
 base_query = ~GQL"""
-query($id: ID!) {
+query GetUser($id: ID!) {
   user(id: $id) {
     id
     username

@@ -1013,6 +1013,7 @@ defmodule GraphqlQuery do
     Enum.reduce(sigil_opts, [], fn
       ?i, acc -> Keyword.put(acc, :ignore, true)
       ?r, acc -> Keyword.put(acc, :runtime, true)
+      ?c, acc -> acc |> Keyword.put(:runtime, false) |> Keyword.put(:ignore, false)
       ?s, acc -> Keyword.put(acc, :type, :schema)
       ?f, acc -> Keyword.put(acc, :type, :fragment)
       ?q, acc -> Keyword.put(acc, :type, :query)
