@@ -7,11 +7,20 @@ defmodule GraphqlQuery do
              |> Enum.fetch!(1)
              |> String.replace("](#", "](#module-")
 
-  alias __MODULE__.{Parser, Document, Validator}
+  alias __MODULE__.{Parser, Document, Fragment, Validator}
 
   require GraphqlQuery.Logger
-
   defguardp ast?(value) when is_tuple(value) and tuple_size(value) == 3
+
+  @spec add_variable(Document.t(), atom(), any()) :: Document.t()
+  defdelegate add_variable(document, key, value), to: Document
+  @spec add_variables(Document.t(), map() | keyword()) :: Document.t()
+  defdelegate add_variables(document, variables), to: Document
+
+  @spec add_fragment(Document.t(), Fragment.t() | any()) :: Document.t()
+  defdelegate add_fragment(document, fragment), to: Document
+  @spec add_fragments(Document.t(), list(Fragment.t() | any())) :: Document.t()
+  defdelegate add_fragments(document, fragments), to: Document
 
   @doc """
   Sets up the module to use GraphQL query macros and validation.
@@ -332,98 +341,49 @@ defmodule GraphqlQuery do
   defmacro gql_from_file(file_path, {:runtime, opts}) do
     caller = __CALLER__
 
-    file_path =
-      case expand_until_string(file_path, caller, true) do
-        {:ok, file_path} ->
-          Module.put_attribute(caller.module, :external_resource, file_path)
-          file_path
-
-        {:error, _error} ->
-          file_path
-
-        :error ->
-          file_path
-      end
-
+    file_path = gql_from_file_expand_path!(file_path, caller)
     warn_location = [file: file_path]
     module_opts = get_module_opts(caller)
 
-    contents = File.read!(file_path)
+    contents = read_gql_file!(file_path, caller)
 
     validate_on_runtime(contents, opts, module_opts, warn_location)
   end
 
-  defmacro gql_from_file(file_path, opts) do
+  defmacro gql_from_file(ast, opts) do
     caller = __CALLER__
 
-    file_path =
-      case expand_until_string(file_path, caller, true) do
-        {:ok, file_path} ->
-          file_path
+    file_path = gql_from_file_expand_path!(ast, caller)
 
-        {:error, error} ->
-          raise ArgumentError,
-                "The file path for gql_from_file/2 must be a string or a module attribute containing a string. Got: #{inspect(error)}"
+    contents = read_gql_file!(file_path, caller)
 
-        :error ->
-          file_path
-      end
+    do_gql_validate_options(contents, [contents], caller, [file: file_path], opts)
+  end
 
-    warn_location = [file: file_path]
+  defp gql_from_file_expand_path!(ast, caller) do
+    case expand_until_string(ast, caller, true) do
+      {:ok, file_path} ->
+        file_path
 
-    case validate_options(opts, caller) do
-      {:ok, opts} ->
-        do_gql_from_file(file_path, opts, caller)
+      {:error, error} ->
+        raise ArgumentError,
+              "The file path for gql_from_file/2 must be a string or be expandable to a string. Got: #{inspect(error)}"
 
-      {:error, error, field} ->
-        warning_options_error(error, field, warn_location)
-        opts = {:runtime, [opts]}
-        {:gql_from_file, [], [file_path, opts]}
-
-      {:ignore, opts} ->
-        {:gql_from_file, [], [file_path, opts]}
-
-      {:runtime, opts} ->
-        {:gql_from_file, [], [file_path, opts]}
+      :error ->
+        raise ArgumentError,
+              "The file path for gql_from_file/2 must be a string or be expandable to a string. Got: #{inspect(ast)}"
     end
   end
 
-  def do_gql_from_file(file_path, opts, caller) do
+  defp read_gql_file!(file_path, caller) do
     Module.put_attribute(caller.module, :external_resource, file_path)
 
-    ignore? = get_option(opts, :ignore, false, caller)
-    runtime_validation? = get_option(opts, :runtime, false, caller)
-    type = get_option(opts, :type, :query, caller)
-    schema_module = get_schema_module(opts, caller)
-    fragments = get_option(opts, :fragments, [], caller)
-    format = get_option(opts, :format, false, caller)
-
-    contents = File.read!(file_path)
-
-    warn_location = [file: file_path]
-
-    query_opts = [
-      path: file_path,
-      type: type,
-      schema: schema_module,
-      fragments: fragments,
-      ignore?: ignore?,
-      location: warn_location,
-      format: format
-    ]
-
-    cond do
-      ignore? ->
+    case File.read(file_path) do
+      {:ok, contents} ->
         contents
-        |> Document.new(query_opts)
-        |> Macro.escape()
 
-      runtime_validation? ->
-        module_opts = get_module_opts(caller)
-        validate_on_runtime(contents, opts, module_opts, warn_location)
-
-      true ->
-        contents |> Document.new(query_opts) |> do_validate(warn_location) |> Macro.escape()
+      {:error, reason} ->
+        raise File.Error, action: "read", path: file_path, reason: reason
     end
   end
 
@@ -524,31 +484,19 @@ defmodule GraphqlQuery do
     # String with dynamic parts
     caller = __CALLER__
 
-    case validate_options(opts, caller) do
-      {:ok, opts} ->
-        do_gql(original, parts, caller, meta, opts)
-
-      {:error, error, field} ->
-        warning_options_error(error, field, warn_location(meta, caller))
-
-        opts = {:runtime, [opts]}
-        {:gql, [], [opts, original]}
-
-      {:ignore, opts} ->
-        {:gql, [], [opts, original]}
-
-      {:runtime, opts} ->
-        {:gql, [], [opts, original]}
-    end
+    do_gql_validate_options(original, parts, caller, meta, opts)
   end
 
   defmacro gql(opts, {_, meta, _} = ast) do
     # Method or module attribute call
     caller = __CALLER__
+    do_gql_validate_options(ast, [ast], caller, meta, opts)
+  end
 
+  defp do_gql_validate_options(ast, parts, caller, meta, opts) do
     case validate_options(opts, caller) do
       {:ok, opts} ->
-        do_gql(ast, [ast], caller, meta, opts)
+        do_gql(ast, parts, caller, meta, opts)
 
       {:error, error, field} ->
         warning_options_error(error, field, warn_location(meta, caller))
@@ -565,7 +513,7 @@ defmodule GraphqlQuery do
   end
 
   defp do_gql(original, parts, caller, meta, opts) do
-    file = caller.file
+    file = meta[:file] || caller.file
 
     warn_location = warn_location(meta, caller, -4)
     evaluate? = get_option(opts, :evaluate, false, caller)
@@ -581,10 +529,6 @@ defmodule GraphqlQuery do
 
     {static_parts, dynamic_parts} =
       Enum.map_reduce(parts, [], fn
-        part, acc when is_binary(part) ->
-          # Static part, no need to expand
-          {part, acc}
-
         ast, acc ->
           case expand_until_string(ast, caller, evaluate?) do
             {:ok, value} ->
@@ -852,6 +796,7 @@ defmodule GraphqlQuery do
     indentation = meta[:indentation] || 0
     line = if meta[:line], do: meta[:line], else: line
     column = if column = meta[:column], do: column + shift
+    file = if meta[:file], do: meta[:file], else: file
 
     [
       line: line,
@@ -888,11 +833,30 @@ defmodule GraphqlQuery do
     end)
   end
 
+  defp expand_until_string({:<<>>, _meta, parts}, caller, evaluate?) do
+    expand_until_string(parts, caller, evaluate?)
+  end
+
+  defp expand_until_string(parts, caller, evaluate?) when is_list(parts) do
+    Enum.reduce_while(parts, {:ok, ""}, fn part, {:ok, acc} ->
+      case expand_until_string(part, caller, evaluate?) do
+        {:ok, string} -> {:cont, {:ok, acc <> string}}
+        {:error, error} -> {:halt, {:error, error}}
+        :error -> {:halt, :error}
+      end
+    end)
+  end
+
+  defp expand_until_string(string, _caller, _evaluate?) when is_binary(string) do
+    {:ok, string}
+  end
+
   defp expand_until_string(ast, caller, evaluate?) do
     expand_until(ast, caller, evaluate?, fn
       string when is_binary(string) -> {:ok, string}
       %GraphqlQuery.Fragment{} = fragment -> {:ok, to_string(fragment)}
       %GraphqlQuery.Document{} = document -> {:ok, to_string(document)}
+      {:error, reason} -> {:error, reason}
       _ -> :error
     end)
   end

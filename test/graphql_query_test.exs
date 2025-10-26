@@ -170,7 +170,8 @@ defmodule GraphqlQueryTest do
         end
       end
 
-      assert %Document{query: result, type: :query} = TestGqlEvaluate2.query()
+      test_path = __ENV__.file
+      assert %Document{query: result, type: :query, path: ^test_path} = TestGqlEvaluate2.query()
       assert result =~ "id name email"
     end
 
@@ -1048,6 +1049,161 @@ defmodule GraphqlQueryTest do
                logs =~ "Falling back to runtime validation"
     end
 
+    test "gql_from_file expand until string" do
+      query_ast =
+        quote do
+          defmodule TestGqlFromFileExpandString do
+            import GraphqlQuery
+
+            @base_path "test/fixtures"
+
+            def query do
+              gql_from_file "#{@base_path}/test_query.graphql"
+            end
+          end
+        end
+
+      Code.eval_quoted(query_ast)
+
+      call_ast =
+        quote do
+          TestGqlFromFileExpandString.query()
+        end
+
+      {query, _} = Code.eval_quoted(call_ast)
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query GetUser($id: ID!)"
+    end
+
+    test "gql_from_file with base directory from public method in other module" do
+      query_ast =
+        quote do
+          defmodule PathProvider do
+            def get_base_path, do: "test/fixtures"
+          end
+
+          defmodule TestGqlFromFilePublicMethod do
+            import GraphqlQuery
+
+            def query do
+              gql_from_file "#{PathProvider.get_base_path()}/test_query.graphql"
+            end
+          end
+        end
+
+      Code.eval_quoted(query_ast)
+
+      call_ast =
+        quote do
+          TestGqlFromFilePublicMethod.query()
+        end
+
+      {query, _} = Code.eval_quoted(call_ast)
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query GetUser($id: ID!)"
+    end
+
+    test "gql_from_file with call to internal method - should fail at compile time" do
+      query_ast =
+        quote do
+          defmodule TestGqlFromFileInternalMethod do
+            import GraphqlQuery
+
+            defp get_filename, do: "test_query.graphql"
+
+            def query do
+              gql_from_file("test/fixtures/#{get_filename()}")
+            end
+          end
+        end
+
+      # This should fail at compile time because function calls in interpolation can't be expanded
+      assert_raise ArgumentError, ~r/The file path for gql_from_file\/2 must be a string/, fn ->
+        Code.eval_quoted(query_ast)
+      end
+    end
+
+    test "gql_from_file with nested interpolation and module attributes" do
+      query_ast =
+        quote do
+          defmodule TestGqlFromFileNestedExpansion do
+            import GraphqlQuery
+
+            @base "test"
+            @subdir "fixtures"
+
+            def query do
+              gql_from_file "#{@base}/#{@subdir}/test_query.graphql"
+            end
+          end
+        end
+
+      Code.eval_quoted(query_ast)
+
+      call_ast =
+        quote do
+          TestGqlFromFileNestedExpansion.query()
+        end
+
+      {query, _} = Code.eval_quoted(call_ast)
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query GetUser($id: ID!)"
+    end
+
+    test "gql_from_file incorrect expansion - nonexistent file fails at compile time" do
+      query_ast =
+        quote do
+          defmodule TestGqlFromFileIncorrectExpansion do
+            import GraphqlQuery
+
+            @base_path "test/fixtures"
+
+            def query do
+              gql_from_file("#{@base_path}/nonexistent_file.graphql")
+            end
+          end
+        end
+
+      # This should fail at compile time because the file doesn't exist
+      assert_raise File.Error,
+                   ~r/could not read \"test\/fixtures\/nonexistent_file.graphql\": no such file or directory/,
+                   fn ->
+                     Code.eval_quoted(query_ast)
+                   end
+    end
+
+    test "gql_from_file with runtime resolution using document_with_options" do
+      query_ast =
+        quote do
+          defmodule TestGqlFromFileRuntimeResolution do
+            import GraphqlQuery
+
+            @filename "test/fixtures/test_query.graphql"
+
+            def query do
+              document_with_options runtime: true do
+                gql_from_file("#{@filename}")
+              end
+            end
+          end
+        end
+
+      Code.eval_quoted(query_ast)
+
+      call_ast =
+        quote do
+          TestGqlFromFileRuntimeResolution.query()
+        end
+
+      {query, _} = Code.eval_quoted(call_ast)
+
+      assert %Document{query: result, type: :query} = query
+      assert result =~ "query GetUser($id: ID!)"
+    end
+
     test "gql_from_file macro - function call in options should warn" do
       content = "query { user { id name unknown } }"
 
@@ -1649,6 +1805,9 @@ defmodule GraphqlQueryTest do
         refute logs =~ "unknown_field"
         refute logs =~ "[GraphqlQuery]"
 
+        # We delete the file, to make sure it's not read more than once
+        File.rm(file_path)
+
         # But runtime validation should catch the errors
         call_ast =
           quote do
@@ -1927,6 +2086,51 @@ defmodule GraphqlQueryTest do
       assert %Fragment{format: false} = fragment
     end
 
+    test "gql_from_file with runtime: true only reads the file once" do
+      content = """
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          id
+          name
+        }
+      }
+      """
+
+      with_tmp_file(content, fn file_path ->
+        ast =
+          quote do
+            defmodule TestGqlFromFileRuntimeOnce do
+              use GraphqlQuery, runtime: true
+
+              def query_from_file do
+                gql_from_file(unquote(file_path))
+              end
+            end
+          end
+
+        Code.compile_quoted(ast)
+
+        # Delete the file to ensure it don't access again
+        File.rm(file_path)
+        refute File.exists?(file_path)
+
+        call_ast =
+          quote do
+            TestGqlFromFileRuntimeOnce.query_from_file()
+          end
+
+        {query, _} = Code.eval_quoted(call_ast)
+
+        assert %Document{query: result} = query
+        assert result =~ "query GetUser($id: ID!)"
+
+        {query, _} = Code.eval_quoted(call_ast)
+
+        assert %Document{query: result} = query
+        assert result =~ "query GetUser($id: ID!)"
+      end)
+    end
+
     test "gql_from_file with format: true applies formatting" do
       # Use existing test fixture
       query =
@@ -2092,7 +2296,7 @@ defmodule GraphqlQueryTest do
     try do
       callback.(file_path)
     after
-      File.rm(file_path)
+      if File.exists?(file_path), do: File.rm(file_path)
     end
   end
 end

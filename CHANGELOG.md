@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Expand path on `gql_from_file`. Fixes #16
+
+### Changed
+- `gql_from_file` needs a file path to be expanded on compile time. It will only read it once, even with runtime validation.
 
 ## [v0.3.8]
 ### Added
