@@ -20,8 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - otp_version: "28.0"
-            elixir_version: "1.19.0-rc.0-otp-28"
+          - otp_version: "28.1.1"
+            elixir_version: "1.19.2"
           - otp_version: "27.3"
             elixir_version: "1.18"
           - otp_version: "26.2"
