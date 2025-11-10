@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustler = { version = "0.36" }
-apollo-compiler = "1.0"
+apollo-compiler = "1.31"
 regex = "1.11.1"
 
 # And then, your features.
