@@ -44,19 +44,27 @@ defmodule GraphqlQueryTest do
 
     test "adds runtime option to ~GQL sigil" do
       # Should not validate at compile time but return the document
-      query =
-        document_with_options runtime: true do
-          ~GQL"""
-          query GetUser($id: ID!) {
-            user(id: $id) {
-              ...NonExistentFragment
-            }
-          }
-          """
-        end
+      # but it should on runtime
+      logs =
+        capture_log(fn ->
+          query =
+            document_with_options runtime: true do
+              ~GQL"""
+              query GetUser($id: ID!) {
+                user(id: $id) {
+                  ...NonExistentFragment
+                }
+              }
+              """
+            end
 
-      assert %Document{query: result, type: :query} = query
-      assert result =~ "...NonExistentFragment"
+          assert %Document{query: result, type: :query} = query
+
+          assert result =~ "...NonExistentFragment"
+        end)
+
+      assert logs =~ "[GraphqlQuery] Runtime Validation error"
+      assert logs =~ "cannot find fragment `NonExistentFragment` in this document"
     end
 
     test "options precedence - sigil modifiers override document_with_options" do
