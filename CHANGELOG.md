@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.3.10]
+### Changed
+- Update apollo-compiler
+- Change CI to use Elixir 1.19.2
+
 ## [v0.3.9]
 ### Fixed
 - Expand path on `gql_from_file`. Fixes #16
