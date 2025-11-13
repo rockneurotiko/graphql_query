@@ -3,6 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- When reading an absinthe schema, print the errors if there were some compilation error
 
 ## [v0.3.10]
 ### Changed
