@@ -83,8 +83,11 @@ if Code.ensure_loaded?(Absinthe) do
         {:ok, blueprint, _phases} ->
           {:ok, inspect(blueprint, pretty: true)}
 
-        _ ->
-          {:error, "Failed to render schema"}
+        {:error, error, _phases} when is_binary(error) ->
+          {:error, error}
+
+        {:error, error, _phases} ->
+          {:error, inspect(error)}
       end
     rescue
       e -> {:error, Exception.message(e)}
