@@ -32,6 +32,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
   - [Parsing and Validating Schemas](#parsing-and-validating-schemas)
   - [Schema Modules](#schema-modules)
   - [Document Validation Against Schema](#document-validation-against-schema)
+- [Apollo Federation Support](#apollo-federation-support)
 - [Formatter Integration](#formatter-integration)
 - [Manual API](#manual-api)
 - [Roadmap](#roadmap)
@@ -64,6 +65,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 - ✅ **Mix format integration** for `~GQL` sigil, `.graphql` and `.gql` files
 - ✅ **Schema modules** with automatic recompilation on schema changes
 - ✅ **Absinthe schema integration** for validating queries against existing Absinthe schemas
+- ✅ **Apollo Federation v2 support** for validating federated schemas with `@key`, `@shareable`, etc.
 - ✅ **Flexible validation modes**: compile-time, runtime, or ignore
 - ✅ **JSON encoding support** for Document structs (JSON/Jason protocols)
 - ⚡ Backed by Rust for fast parsing and validation
@@ -172,6 +174,7 @@ Req.post!("/api", json: user_query)
   - `s` → Parse as schema
   - `q` → Parse as query (this is the default behaviour)
   - `f` → Parse as fragment
+  - `F` → Enable Apollo Federation v2 directives (for schemas)
 
 ```elixir
 import GraphqlQuery
@@ -232,6 +235,7 @@ query GetUser($id: ID!) {
   - `schema: SchemaModule` → Specify the schema module to validate the query or fragment with
   - `fragments: [GraphqlQuery.Fragment.t()]` → Add reusable fragments to queries
   - `format: true` → Apply automatic formatting when converting to string
+  - `federation: true` → Enable Apollo Federation v2 directive support (for schemas)
 
 Example project structure:
 
@@ -276,6 +280,7 @@ end
   - `schema: SchemaModule` → Specify the schema module to validate the query or fragment with
   - `fragments: [GraphqlQuery.Fragment.t()]` → Add reusable fragments to queries
   - `format: true` → Apply automatic formatting when converting to string
+  - `federation: true` → Enable Apollo Federation v2 directive support (for schemas)
 
 ```elixir
 defmodule Example do
@@ -626,6 +631,103 @@ defmodule MyApp.Queries do
   end
 end
 ```
+
+---
+
+## Apollo Federation Support
+
+GraphQL Query supports **Apollo Federation v2** directives, allowing you to validate federated schemas that use directives like `@key`, `@shareable`, `@external`, and others.
+
+### Enabling Federation Support
+
+Enable federation validation by setting the `federation: true` option. This makes all Apollo Federation v2 directives available in your schema.
+
+**With sigil (using `F` modifier):**
+
+```elixir
+~GQL"""
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key", "@shareable"])
+
+type User @key(fields: "id") {
+  id: ID!
+  name: String! @shareable
+}
+"""sF  # s = schema, F = federation
+```
+
+**With `gql` macro:**
+
+```elixir
+gql [type: :schema, federation: true], """
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key"])
+
+type Product @key(fields: "id") {
+  id: ID!
+  price: Float
+}
+"""
+```
+
+**With `gql_from_file` macro:**
+
+```elixir
+gql_from_file "priv/graphql/federated_schema.graphql", type: :schema, federation: true
+```
+
+**With `document_with_options`:**
+
+```elixir
+document_with_options type: :schema, federation: true do
+  ~GQL"""
+  extend schema @link(url: "https://specs.apollo.dev/federation/v2.9", import: ["@key"])
+  
+  type Order @key(fields: "id") {
+    id: ID!
+    total: Float
+  }
+  """s
+end
+```
+
+**At module level:**
+
+```elixir
+defmodule MyApp.FederatedSchema do
+  use GraphqlQuery, federation: true
+  
+  def schema do
+    ~GQL"""
+    extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
+    
+    type User @key(fields: "id") {
+      id: ID!
+      name: String!
+    }
+    """s
+  end
+end
+```
+
+### Supported Federation Versions
+
+The library supports multiple Apollo Federation v2 versions. Specify the version in your `@link` directive:
+
+- `v2.0` - Base Apollo Federation v2 directives
+- `v2.5` - Adds `@authenticated` and `@requiresScopes`
+- `v2.9` - Adds `@cost` and `@listSize`
+
+Unknown versions automatically fall back to standard validation without federation directives.
+
+### Implementation Note
+
+When `federation: true` is enabled, **all Apollo Federation directives are available** for use in your schema, regardless of what you specify in the `@link` import list. This simplified approach covers the vast majority of use cases and makes it easier to work with federated schemas.
+
+The following directives are available:
+- Core directives: `@key`, `@requires`, `@provides`, `@external`, `@tag`, `@extends`, `@shareable`, `@inaccessible`, `@override`, `@composeDirective`, `@interfaceObject`
+- Authentication (v2.5+): `@authenticated`, `@requiresScopes`, `@policy`
+- Cost control (v2.9+): `@cost`, `@listSize`
 
 ---
 

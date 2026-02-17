@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Add `federation` and `F` options, this will read `@link` directive and add Apollo Federation directives based to parse and validate the schema
+
 ### Fixed
 - When reading an absinthe schema, print the errors if there were some compilation error
 

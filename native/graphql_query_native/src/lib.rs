@@ -7,6 +7,8 @@ use std::collections::HashSet;
 
 use regex::Regex;
 
+mod federation;
+
 #[derive(Debug, Clone, rustler::NifStruct)]
 #[module = "GraphqlQuery.ValidationError"]
 pub struct ValidationError {
@@ -78,6 +80,56 @@ fn parse_query(query: &str, path: &str) -> Result<Document, Vec<ValidationError>
 fn parse_schema(schema: &str, path: &str) -> Result<Valid<Schema>, Vec<ValidationError>> {
     Schema::parse_and_validate(schema, path)
         .map_err(|errors| diagnostics_to_validation_errors(errors.errors))
+}
+
+fn validate_schema_with_federation(
+    schema_str: &str,
+    path: &str,
+) -> Result<rustler::Atom, Vec<ValidationError>> {
+    // 1. Parse the raw SDL to get the AST
+    let document = apollo_compiler::ast::Document::parse(schema_str, path)
+        .map_err(|parse_result| diagnostics_to_validation_errors(parse_result.errors))?;
+
+    // 2. Extract @link directives from schema definition
+    let links = federation::extract_link_directives(&document);
+
+    // 3. Find federation link
+    let fed_link = links
+        .iter()
+        .find(|l| l.spec.identity == federation::SpecIdentity::Federation);
+
+    // 4. If no federation @link found, fall back to standard validation
+    if fed_link.is_none() {
+        return parse_schema(schema_str, path).map(|_| atoms::ok());
+    }
+
+    let fed_link = fed_link.unwrap();
+
+    // 5. Validate we know this version, fall back if not
+    if !federation::is_known_version(&fed_link.spec.version) {
+        // Unknown version - fall back to standard validation
+        return parse_schema(schema_str, path).map(|_| atoms::ok());
+    }
+
+    // 6. Generate the prelude SDL
+    let prelude = federation::generate_prelude(&links);
+
+    // 7. Build and validate with SchemaBuilder
+    let builder_result = Schema::builder()
+        .parse(&prelude, "federation_prelude.graphql")
+        .parse(schema_str.to_string(), path)
+        .build();
+
+    let schema = match builder_result {
+        Ok(schema) => schema,
+        Err(builder_errors) => return Err(diagnostics_to_validation_errors(builder_errors.errors)),
+    };
+
+    // 8. Validate the schema
+    schema
+        .validate()
+        .map(|_| atoms::ok())
+        .map_err(|validation_errors| diagnostics_to_validation_errors(validation_errors.errors))
 }
 
 fn diagnostics_to_validation_errors(diagnostics: DiagnosticList) -> Vec<ValidationError> {
@@ -245,8 +297,16 @@ fn validate_query(
 }
 
 #[rustler::nif]
-fn validate_schema(schema: String, path: String) -> Result<rustler::Atom, Vec<ValidationError>> {
-    parse_schema(&schema, &path).map(|_| atoms::ok())
+fn validate_schema(
+    schema: String,
+    path: String,
+    federation: bool,
+) -> Result<rustler::Atom, Vec<ValidationError>> {
+    if federation {
+        validate_schema_with_federation(&schema, &path)
+    } else {
+        parse_schema(&schema, &path).map(|_| atoms::ok())
+    }
 }
 
 #[rustler::nif]

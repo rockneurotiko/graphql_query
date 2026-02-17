@@ -43,11 +43,12 @@ defmodule GraphqlQuery.Schema do
   defmacro __using__(opts) do
     file_path = Keyword.get(opts, :schema_path)
     absinthe = Keyword.get(opts, :absinthe_schema)
+    extra_opts = Keyword.drop(opts, [:schema_path, :absinthe_schema])
 
     quote do
       @behaviour GraphqlQuery.Schema
 
-      use GraphqlQuery
+      use GraphqlQuery, unquote(extra_opts)
 
       cond do
         unquote(file_path) ->

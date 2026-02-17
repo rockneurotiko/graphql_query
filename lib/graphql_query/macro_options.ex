@@ -40,6 +40,12 @@ defmodule GraphqlQuery.MacroOptions do
                    default: false,
                    required: false,
                    doc: "Apply formatting when converting to string"
+                 ],
+                 federation: [
+                   type: :boolean,
+                   default: false,
+                   required: false,
+                   doc: "Enable Apollo Federation v2 directive support for schema validation"
                  ]
 
   @moduledoc """
@@ -58,6 +64,9 @@ defmodule GraphqlQuery.MacroOptions do
 
   • :runtime (boolean()) - Use runtime evaluation for the GraphQL query The default
     value is false.
+
+  • :federation (boolean()) - Enable Apollo Federation v2 directive support for schema
+    validation The default value is false.
   """
 
   defstruct Keyword.keys(@config_schema)
@@ -69,7 +78,8 @@ defmodule GraphqlQuery.MacroOptions do
           evaluate: boolean() | nil,
           runtime: boolean() | nil,
           fragments: list(GraphqlQuery.Fragment.t()),
-          format: boolean() | nil
+          format: boolean() | nil,
+          federation: boolean() | nil
         }
 
   @doc """

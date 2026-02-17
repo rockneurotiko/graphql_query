@@ -33,6 +33,7 @@ defmodule GraphqlQuery do
     * `:evaluate` - Whether to try evaluating dynamic parts at compile time (default: false)
     * `:fragments` - List of fragments to include in queries (default: [])
     * `:format` - Whether to apply formatting when converting to string (default: false)
+    * `:federation` - Enable Apollo Federation v2 directive support (default: false)
 
   ## Examples
 
@@ -68,6 +69,7 @@ defmodule GraphqlQuery do
     Module.put_attribute(module, :__graphql_query__schema, schema)
     Module.put_attribute(module, :__graphql_query__fragments, opts.fragments)
     Module.put_attribute(module, :__graphql_query__format, opts.format)
+    Module.put_attribute(module, :__graphql_query__federation, opts.federation)
 
     quote do
       import GraphqlQuery
@@ -103,6 +105,7 @@ defmodule GraphqlQuery do
     * `:schema` - Schema module for validation (default: module schema if set)
     * `:fragments` - List of fragments to include (default: [])
     * `:format` - Apply formatting when converting to string (default: false)
+    * `:federation` - Enable Apollo Federation v2 directive support (default: false)
 
   ## Option Precedence
 
@@ -526,6 +529,7 @@ defmodule GraphqlQuery do
 
     fragments = get_option(opts, :fragments, [], caller)
     format = get_option(opts, :format, false, caller)
+    federation = get_option(opts, :federation, false, caller)
 
     {static_parts, dynamic_parts} =
       Enum.map_reduce(parts, [], fn
@@ -556,7 +560,8 @@ defmodule GraphqlQuery do
       fragments: fragments,
       ignore?: ignore?,
       location: warn_location,
-      format: format
+      format: format,
+      federation: federation
     ]
 
     module_opts = get_module_opts(caller)
@@ -724,7 +729,8 @@ defmodule GraphqlQuery do
       fragments: fragments,
       ignore?: ignore?,
       location: warn_location,
-      format: format
+      format: format,
+      federation: opts[:federation]
     ]
 
     cond do
@@ -764,7 +770,8 @@ defmodule GraphqlQuery do
     {:type, :query},
     {:schema, nil},
     {:fragments, []},
-    {:format, false}
+    {:format, false},
+    {:federation, false}
   ]
 
   def runtime_options(macro_opts, module_opts) do
@@ -981,6 +988,7 @@ defmodule GraphqlQuery do
       ?s, acc -> Keyword.put(acc, :type, :schema)
       ?f, acc -> Keyword.put(acc, :type, :fragment)
       ?q, acc -> Keyword.put(acc, :type, :query)
+      ?F, acc -> Keyword.put(acc, :federation, true)
       _, acc -> acc
     end)
   end
@@ -995,7 +1003,8 @@ defmodule GraphqlQuery do
         get_module_attribute(caller.module, :__graphql_query__schema, nil)
         |> ensure_module_loaded!(caller),
       fragments: get_module_attribute(caller.module, :__graphql_query__fragments, []),
-      format: get_module_attribute(caller.module, :__graphql_query__format, false)
+      format: get_module_attribute(caller.module, :__graphql_query__format, false),
+      federation: get_module_attribute(caller.module, :__graphql_query__federation, false)
     ]
   end
 
@@ -1019,7 +1028,8 @@ defmodule GraphqlQuery do
         fragments: opts[:fragments],
         ignore?: opts[:ignore],
         location: unquote(warn_location),
-        format: opts[:format]
+        format: opts[:format],
+        federation: opts[:federation]
       ]
 
       query = Document.new(calculated_query, query_opts)
@@ -1213,7 +1223,7 @@ defmodule GraphqlQuery do
 
   defp do_validate_options(_other, _caller), do: {:error, :unknown_options, :opts}
 
-  @single_options [:ignore, :runtime, :evaluate, :type, :format]
+  @single_options [:ignore, :runtime, :evaluate, :type, :format, :federation]
 
   defp validate_option_value(k, {_, _, _} = ast, caller) when k in @single_options do
     case expand_and_evaluate(ast, caller, true) do

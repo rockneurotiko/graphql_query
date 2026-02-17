@@ -71,7 +71,8 @@ defmodule GraphqlQuery.Document do
     :document_info,
     :ignore?,
     :location,
-    :format
+    :format,
+    :federation
   ]
 
   @type t :: %__MODULE__{
@@ -85,7 +86,8 @@ defmodule GraphqlQuery.Document do
           document_info: DocumentInfo.t() | nil,
           ignore?: boolean(),
           location: keyword() | nil,
-          format: boolean()
+          format: boolean(),
+          federation: boolean()
         }
 
   @type document :: t() | Fragment.t()
@@ -98,6 +100,7 @@ defmodule GraphqlQuery.Document do
           {:name, String.t() | nil},
           {:ignore?, boolean() | nil},
           {:location, keyword() | nil},
+          {:federation, boolean() | nil},
           {:format, boolean() | nil}
         ]
   @spec new(String.t(), new_options()) :: document()
@@ -109,6 +112,7 @@ defmodule GraphqlQuery.Document do
     fragments = Keyword.get(opts, :fragments, [])
     ignore? = Keyword.get(opts, :ignore?, false)
     location = Keyword.get(opts, :location, nil)
+    federation = Keyword.get(opts, :federation, false)
     format = Keyword.get(opts, :format, false)
 
     # name = Keyword.get(opts, :name, Signature.signature(query))
@@ -124,6 +128,7 @@ defmodule GraphqlQuery.Document do
         type: type,
         ignore?: ignore?,
         location: location,
+        federation: federation,
         format: format
       }
 
