@@ -112,7 +112,7 @@ fn is_valid_graphql_name(s: &str) -> bool {
     }
     // Simple check: alphanumeric + underscore, starts with letter
     s.chars().all(|c| c.is_alphanumeric() || c == '_')
-        && s.chars().next().map_or(false, |c| c.is_alphabetic())
+        && s.chars().next().is_some_and(|c| c.is_alphabetic())
 }
 
 /// Extract all @link directives from a schema document
@@ -185,10 +185,7 @@ fn parse_link_directive(directive: &apollo_compiler::ast::Directive) -> Option<L
 /// Parse the import argument value into a list of ImportEntry
 fn parse_import_argument(value: &Node<Value>) -> Vec<ImportEntry> {
     match &**value {
-        Value::List(items) => items
-            .iter()
-            .filter_map(|item| parse_import_item(item))
-            .collect(),
+        Value::List(items) => items.iter().filter_map(parse_import_item).collect(),
         _ => Vec::new(),
     }
 }
@@ -421,7 +418,7 @@ fn version_gte(version: &str, min_version: &str) -> bool {
     let parse_version = |v: &str| -> (u32, u32) {
         let v = v.strip_prefix('v').unwrap_or(v);
         let parts: Vec<&str> = v.split('.').collect();
-        let major = parts.get(0).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let major = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
         let minor = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
         (major, minor)
     };
@@ -487,11 +484,10 @@ fn generate_link_spec_prelude(link_spec: Option<&LinkDirective>) -> String {
         "link__Purpose".to_string()
     };
 
-    prelude.push_str(&format!("scalar {}\n", import_scalar));
-    prelude.push_str(&format!("enum {} {{ SECURITY EXECUTION }}\n", purpose_enum));
+    prelude.push_str(&format!("scalar {import_scalar}\n"));
+    prelude.push_str(&format!("enum {purpose_enum} {{ SECURITY EXECUTION }}\n"));
     prelude.push_str(&format!(
-        "directive @{}(url: String!, as: String, for: {}, import: [{}]) repeatable on SCHEMA\n\n",
-        directive_name, purpose_enum, import_scalar
+        "directive @{directive_name}(url: String!, as: String, for: {purpose_enum}, import: [{import_scalar}]) repeatable on SCHEMA\n\n",
     ));
 
     prelude
@@ -519,24 +515,24 @@ fn generate_federation_prelude(fed_link: &LinkDirective) -> String {
 
     // Generate supporting scalars
     let fieldset_name = resolve_type_name_from_map("FieldSet", &type_import_map, &fed_link.prefix);
-    prelude.push_str(&format!("scalar {}\n", fieldset_name));
+    prelude.push_str(&format!("scalar {fieldset_name}\n"));
 
     if version_gte(version, "v2.5") {
         let scope_name =
             resolve_type_name_from_map("federation__Scope", &type_import_map, &fed_link.prefix);
-        prelude.push_str(&format!("scalar {}\n", scope_name));
+        prelude.push_str(&format!("scalar {scope_name}\n"));
     }
 
     if version_gte(version, "v2.6") {
         let policy_name =
             resolve_type_name_from_map("federation__Policy", &type_import_map, &fed_link.prefix);
-        prelude.push_str(&format!("scalar {}\n", policy_name));
+        prelude.push_str(&format!("scalar {policy_name}\n"));
     }
 
     if version_gte(version, "v2.8") {
         let context_name =
             resolve_type_name_from_map("ContextFieldValue", &type_import_map, &fed_link.prefix);
-        prelude.push_str(&format!("scalar {}\n", context_name));
+        prelude.push_str(&format!("scalar {context_name}\n"));
     }
 
     prelude.push('\n');
@@ -596,7 +592,7 @@ fn resolve_directive_name(original: &str, imports: &[ImportEntry], prefix: &str)
         .iter()
         .find(|i| i.is_directive && i.original_name == original)
         .map(|i| i.local_name.clone())
-        .unwrap_or_else(|| format!("{}__{}", prefix, original))
+        .unwrap_or_else(|| format!("{prefix}__{original}"))
 }
 
 /// Resolve a type name based on imports and prefix
