@@ -46,7 +46,7 @@ defmodule GraphqlQuery.Validator do
   def validate(%Document{} = query) do
     path = query.path || "document.graphql"
 
-    validate(to_string(query), path, query.schema, query.type)
+    validate(to_string(query), path, query.schema, query.type, federation: query.federation)
   end
 
   @spec validate(Fragment.t()) :: :ok | {:error, [validation_error()]}
@@ -102,15 +102,19 @@ defmodule GraphqlQuery.Validator do
       :ok
   """
 
-  @spec validate(String.t(), String.t(), module() | nil, document_type()) ::
+  @spec validate(String.t(), String.t(), module() | nil, document_type(), keyword()) ::
           :ok | {:error, [validation_error()]}
-  def validate(query, path, _schema_module, :schema)
+  def validate(query, path, schema_module, type, opts \\ [])
+
+  def validate(query, path, _schema_module, :schema, opts)
       when is_binary(query) and is_binary(path) do
-    Native.validate_schema(query, path)
+    federation = Keyword.get(opts, :federation, false)
+
+    Native.validate_schema(query, path, federation)
     |> clean_result()
   end
 
-  def validate(query, path, schema_module, :query)
+  def validate(query, path, schema_module, :query, _opts)
       when is_binary(query) and is_binary(path) do
     schema = if schema_module, do: to_string(schema_module.schema())
     schema_path = if schema_module, do: schema_module.schema_path()
@@ -119,7 +123,7 @@ defmodule GraphqlQuery.Validator do
     |> clean_result()
   end
 
-  def validate(query, path, schema_module, :fragment)
+  def validate(query, path, schema_module, :fragment, _opts)
       when is_binary(query) and is_binary(path) do
     schema = if schema_module, do: to_string(schema_module.schema())
     schema_path = if schema_module, do: schema_module.schema_path()

@@ -10,8 +10,9 @@ defmodule GraphqlQuery.Schema do
 
     * `:schema_path` - Path to a `.graphql` or `.gql` schema file to load.
     * `:absinthe_schema` - An Absinthe schema module to extract the schema from.
+    * `:federation` - Enable Apollo Federation directive support when loading the schema.
 
-  ## Example
+  ## Examples
 
       defmodule MyApp.Schema do
         use GraphqlQuery.Schema, schema_path: "priv/schema.graphql"
@@ -19,6 +20,12 @@ defmodule GraphqlQuery.Schema do
 
       defmodule MyApp.AbsintheSchema do
         use GraphqlQuery.Schema, absinthe_schema: MyAppWeb.Graphql.Schema
+      end
+
+      defmodule MyApp.FederatedSchema do
+        use GraphqlQuery.Schema,
+          schema_path: "priv/federated_schema.graphql",
+          federation: true
       end
 
       # The schema will be automatically loaded from the file
@@ -43,11 +50,12 @@ defmodule GraphqlQuery.Schema do
   defmacro __using__(opts) do
     file_path = Keyword.get(opts, :schema_path)
     absinthe = Keyword.get(opts, :absinthe_schema)
+    extra_opts = Keyword.drop(opts, [:schema_path, :absinthe_schema])
 
     quote do
       @behaviour GraphqlQuery.Schema
 
-      use GraphqlQuery
+      use GraphqlQuery, unquote(extra_opts)
 
       cond do
         unquote(file_path) ->

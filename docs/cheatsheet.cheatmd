@@ -25,7 +25,8 @@ defmodule MyApp.Queries do
     ignore: false,
     evaluate: false,
     fragments: [],
-    format: false
+    format: false,
+    federation: false
 end
 ```
 {: .wrap}
@@ -193,6 +194,9 @@ type Query {
 
 # Schema document
 ~GQL""s
+
+# Federation support (for schemas)
+~GQL""sF
 ```
 {: .wrap}
 
@@ -250,6 +254,9 @@ query = gql_from_file("priv/queries/get_user.graphql", runtime: true)
 
 # Apply formatting when transformed to string
 query = gql_from_file("priv/queries/get_user.graphql", format: true)
+
+# Enable Apollo Federation directives (for schemas)
+schema = gql_from_file("priv/federated_schema.graphql", type: :schema, federation: true)
 ```
 {: .wrap}
 
@@ -320,6 +327,9 @@ query = gql [runtime: true], ""
 
 # Apply automatic formatting when transforming to string
 query = gql [format: true], "query{user{id name}}"
+
+# Enable Apollo Federation directives (for schemas)
+schema = gql [type: :schema, federation: true], ""
 ```
 {: .wrap}
 
@@ -416,6 +426,172 @@ to_string(query)
 "#{fragment}"
 # Even when encoding to JSON
 Jason.encode!(query)
+```
+{: .wrap}
+
+## Apollo Federation
+{: .col-2}
+
+### Federation Schema with Sigil
+
+```elixir
+# Use the "F" modifier to enable federation directives
+~GQL"""
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@shareable"])
+
+type User @key(fields: "id") {
+  id: ID!
+  name: String! @shareable
+  email: String!
+}
+"""sF # <- "s" for schema, "F" for federation
+```
+{: .wrap}
+
+### Federation with gql Macro
+
+```elixir
+# Use federation: true option
+schema = gql [type: :schema, federation: true], """
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.5", 
+    import: ["@key", "@authenticated"])
+
+type Product @key(fields: "id") @authenticated {
+  id: ID!
+  name: String!
+  price: Float
+}
+"""
+```
+{: .wrap}
+
+### Federation with gql_from_file
+
+```elixir
+# Load federated schema from file
+schema = gql_from_file(
+  "priv/federated_schema.graphql",
+  type: :schema,
+  federation: true
+)
+```
+{: .wrap}
+
+### Federation with document_with_options
+
+```elixir
+document_with_options type: :schema, federation: true do
+  ~GQL"""
+  extend schema
+    @link(url: "https://specs.apollo.dev/federation/v2.0", 
+      import: ["@key"])
+
+  type Order @key(fields: "id") {
+    id: ID!
+    total: Float
+  }
+  """s
+end
+```
+{: .wrap}
+
+### Module-level Federation
+
+```elixir
+defmodule MyApp.FederatedSchema do
+  use GraphqlQuery, federation: true
+
+  def schema do
+    ~GQL"""
+    extend schema
+      @link(url: "https://specs.apollo.dev/federation/v2.0", 
+        import: ["@key", "@external"])
+
+    type User @key(fields: "id") {
+      id: ID!
+      reviews: [Review!]! @external
+    }
+    """s
+  end
+end
+```
+{: .wrap}
+
+### Supported Federation Versions
+
+```elixir
+# Federation v2.0 - Base directives
+~GQL"""
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.0", 
+    import: ["@key", "@requires", "@provides", "@external", 
+             "@tag", "@extends", "@shareable", "@inaccessible", 
+             "@override"])
+"""sF
+
+# Federation v2.5 - Adds authentication
+~GQL"""
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.5", 
+    import: ["@authenticated", "@requiresScopes"])
+"""sF
+
+# Federation v2.9 - Adds cost control
+~GQL"""
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.9", 
+    import: ["@cost", "@listSize"])
+"""sF
+```
+{: .wrap}
+
+### Federation with Renamed Directives
+
+```elixir
+# Rename directives with "as:"
+~GQL"""
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.0", 
+    import: [{name: "@key", as: "@primaryKey"}])
+
+type Product @primaryKey(fields: "id") {
+  id: ID!
+  name: String!
+}
+"""sF
+```
+{: .wrap}
+
+### Federation with Custom Namespace
+
+```elixir
+# Use custom namespace prefix
+~GQL"""
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.0", 
+    import: ["@key"], as: "fed")
+
+type User @key(fields: "id") {
+  id: ID!
+  # Non-imported directives use the prefix
+  name: String! @fed__shareable
+}
+"""sF
+```
+{: .wrap}
+
+### Federation Options in use GraphqlQuery
+
+```elixir
+defmodule MyApp.Schemas do
+  use GraphqlQuery,
+    federation: true,
+    # ... other options
+    schema: nil,
+    runtime: false
+end
 ```
 {: .wrap}
 

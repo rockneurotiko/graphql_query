@@ -40,7 +40,7 @@ defmodule GraphqlQuery.Native do
   Validates a GraphQL schema string with a document path.
   Returns :ok if valid, {:error, [GraphqlQuery.ValidationError.t()]} if invalid with detailed error messages.
   """
-  def validate_schema(_schema, _path), do: error()
+  def validate_schema(_schema, _path, _federation \\ false), do: error()
 
   @doc """
   Validates a GraphQL fragment string with a document path.
