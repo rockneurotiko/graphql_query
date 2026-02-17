@@ -45,6 +45,16 @@ defmodule GraphqlQuery do
         end
       end
 
+      # With Apollo Federation support
+      defmodule MyApp.FederatedSchema do
+        use GraphqlQuery, federation: true
+
+        def schema do
+          # Use sF modifiers: s=schema, F=federation
+          gql [type: :schema, federation: true], "..."
+        end
+      end
+
   """
   defmacro __using__(opts) do
     caller = __CALLER__
@@ -179,6 +189,20 @@ defmodule GraphqlQuery do
         @get_users ~GQL\"\"\"
         query GetUsers { users { ...UserFields } }
         \"\"\"
+      end
+
+  ### Apollo Federation Support
+
+      document_with_options type: :schema, federation: true do
+        ~GQL\"\"\"
+        extend schema
+          @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key"])
+
+        type Product @key(fields: "id") {
+          id: ID!
+          name: String!
+        }
+        \"\"\"s
       end
 
   ## Integration Notes
@@ -323,6 +347,7 @@ defmodule GraphqlQuery do
     * `:ignore` - Skip validation (default: false)
     * `:schema` - Schema module for validation (default: module schema if set)
     * `:fragments` - List of fragments to include (default: [])
+    * `:federation` - Enable Apollo Federation directives (default: false)
 
   ## Examples
 
@@ -336,6 +361,11 @@ defmodule GraphqlQuery do
 
       # Load schema
       schema = gql_from_file("priv/schema.graphql", type: :schema)
+
+      # Load federation schema
+      federation_schema = gql_from_file("priv/federated_schema.graphql",
+                                        type: :schema,
+                                        federation: true)
 
   """
 
@@ -405,6 +435,7 @@ defmodule GraphqlQuery do
     * `:schema` - Schema module for validation (default: module schema if set)
     * `:fragments` - List of fragments to include (default: [])
     * `:format` - Apply formatting when converting to string (default: false)
+    * `:federation` - Enable Apollo Federation v2 directive support (default: false)
 
   ## Examples
 
@@ -422,6 +453,9 @@ defmodule GraphqlQuery do
 
       # Schema validation
       query = gql [schema: MyApp.Schema], "query { user { id name } }"
+
+      # Apollo Federation schema
+      schema = gql [type: :schema, federation: true], "extend schema @link(...) type Product @key(...) { ... }"
 
   """
   defmacro gql(opts \\ [], ast)
@@ -618,6 +652,7 @@ defmodule GraphqlQuery do
     * `s` - Parse as schema document
     * `q` - Parse as query document (default)
     * `f` - Parse as fragment document
+    * `F` - Enable Apollo Federation v2 directives support
 
   ## Examples
 
@@ -678,6 +713,19 @@ defmodule GraphqlQuery do
         }
       }
       \"\"\"r |> GraphqlQuery.Document.add_fragment(user_fragment)
+
+  ### Apollo Federation Schema
+
+      # Use F modifier to enable federation directives
+      ~GQL\"\"\"
+      extend schema
+        @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key"])
+
+      type Product @key(fields: "id") {
+        id: ID!
+        name: String!
+      }
+      \"\"\"sF
 
   ## Integration with Mix Format
 
