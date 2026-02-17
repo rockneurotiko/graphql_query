@@ -3,6 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v0.4.0]
 ### Added
 - Add `federation` and `F` options, this will read `@link` directive and add Apollo Federation directives based to parse and validate the schema
 

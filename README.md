@@ -81,7 +81,7 @@ Add `graphql_query` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:graphql_query, "~> 0.3"}
+    {:graphql_query, "~> 0.4"}
   ]
 end
 ```
