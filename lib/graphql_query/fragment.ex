@@ -7,7 +7,17 @@ defmodule GraphqlQuery.Fragment do
 
   require GraphqlQuery.Logger
 
-  defstruct [:name, :fragment, :path, :schema, :document_info, :ignore?, :location, :format]
+  defstruct [
+    :name,
+    :fragment,
+    :path,
+    :schema,
+    :document_info,
+    :ignore?,
+    :location,
+    :format,
+    :federation
+  ]
 
   @type t :: %__MODULE__{
           name: String.t(),
@@ -17,7 +27,8 @@ defmodule GraphqlQuery.Fragment do
           document_info: DocumentInfo.t() | nil,
           ignore?: boolean(),
           location: keyword() | nil,
-          format: boolean()
+          format: boolean(),
+          federation: boolean()
         }
 
   @doc """
@@ -46,7 +57,8 @@ defmodule GraphqlQuery.Fragment do
       schema: document.schema,
       ignore?: document.ignore?,
       location: document.location,
-      format: document.format
+      format: document.format,
+      federation: document.federation
     }
 
     Document.calculate_info(fragment)

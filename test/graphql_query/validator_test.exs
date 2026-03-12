@@ -255,4 +255,245 @@ defmodule GraphqlQuery.ValidatorTest do
       assert error.message =~ "syntax error"
     end
   end
+
+  describe "validate/1 — query validation with a federation schema" do
+    test "accepts a valid query against a federation schema" do
+      query = """
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          id
+          name
+          email
+        }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationSchema, federation: true)
+      assert :ok = Validator.validate(document)
+    end
+
+    test "rejects a query with a non-existent field against a federation schema" do
+      query = """
+      query GetUser {
+        user(id: "1") {
+          id
+          ghostField
+        }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationSchema, federation: true)
+      assert {:error, errors} = Validator.validate(document)
+      assert Enum.any?(errors, &(&1.message =~ "ghostField"))
+    end
+
+    test "accepts a query selecting multiple entity types" do
+      query = """
+      query GetAll {
+        user(id: "1") { id name }
+        product(id: "2") { id title }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationSchema, federation: true)
+      assert :ok = Validator.validate(document)
+    end
+
+    test "rejects a query with a non-existent argument" do
+      query = """
+      query GetUser {
+        user(unknownArg: "foo") {
+          id
+        }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationSchema, federation: true)
+      assert {:error, errors} = Validator.validate(document)
+      # The error must be about the unknown argument, not about unknown directives
+      assert Enum.any?(errors, &(&1.message =~ ~r/unknownArg|argument/i))
+      assert Enum.all?(errors, &(not (&1.message =~ "cannot find directive")))
+    end
+
+    test "federation: false on options are being overriden if the schema has federation" do
+      query = """
+      query GetUser($id: ID!) {
+        user(id: $id) { id name }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationSchema, federation: false)
+      assert :ok = Validator.validate(document)
+    end
+
+    test "error schema with federation not expanded" do
+      query = """
+      query GetUser($id: ID!) {
+        user(id: $id) { id name }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationIgnoredSchema, federation: false)
+      assert {:error, errors} = Validator.validate(document)
+      assert Enum.any?(errors, &(&1.message =~ "cannot find directive `@link`"))
+    end
+
+    test "federation option true overrides schema's one" do
+      query = """
+      query GetUser($id: ID!) {
+        user(id: $id) { id name }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationIgnoredSchema, federation: true)
+
+      assert :ok = Validator.validate(document)
+    end
+
+    test "schema_module.federation?/0 is used as default when not set on document" do
+      # validate/5 directly (bypassing Document struct) — schema_module.federation?()
+      # is the default source for federation when :federation is not in opts.
+      query = "query GetUser($id: ID!) { user(id: $id) { id name } }"
+
+      assert :ok =
+               Validator.validate(query, "query.graphql", Test.FederationSchema, :query)
+    end
+
+    test "plain schema validation still works (no federation)" do
+      query = """
+      query GetUser($id: ID!) {
+        user(id: $id) { id name }
+      }
+      """
+
+      document = Document.new(query, schema: Test.Schema)
+      assert :ok = Validator.validate(document)
+    end
+  end
+
+  describe "validate/1 — fragment validation with a federation schema" do
+    test "accepts a valid fragment against a federation schema" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        name
+        email
+      }
+      """
+
+      document =
+        Document.new(fragment, type: :fragment, schema: Test.FederationSchema, federation: true)
+
+      assert :ok = Validator.validate(document)
+    end
+
+    test "rejects a fragment with a non-existent field against a federation schema" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        ghostField
+      }
+      """
+
+      document =
+        Document.new(fragment, type: :fragment, schema: Test.FederationSchema, federation: true)
+
+      assert {:error, errors} = Validator.validate(document)
+      assert Enum.any?(errors, &(&1.message =~ "ghostField"))
+    end
+
+    test "accepts a fragment on a product entity" do
+      fragment = """
+      fragment ProductFields on Product {
+        id
+        title
+      }
+      """
+
+      document =
+        Document.new(fragment, type: :fragment, schema: Test.FederationSchema, federation: true)
+
+      assert :ok = Validator.validate(document)
+    end
+
+    test "rejects a fragment on a non-existent type" do
+      fragment = """
+      fragment GhostFields on GhostType {
+        id
+      }
+      """
+
+      document =
+        Document.new(fragment, type: :fragment, schema: Test.FederationSchema, federation: true)
+
+      assert {:error, errors} = Validator.validate(document)
+      assert Enum.any?(errors, &(&1.message =~ "GhostType"))
+    end
+
+    test "federation: false on options are being overriden if the schema has federation" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        name
+      }
+      """
+
+      document =
+        Document.new(fragment, type: :fragment, schema: Test.FederationSchema, federation: false)
+
+      assert :ok = Validator.validate(document)
+    end
+
+    test "error schema with federation not expanded" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        name
+      }
+      """
+
+      document =
+        Document.new(fragment,
+          type: :fragment,
+          schema: Test.FederationIgnoredSchema,
+          federation: false
+        )
+
+      assert {:error, errors} = Validator.validate(document)
+      assert Enum.any?(errors, &(&1.message =~ "cannot find directive `@link`"))
+    end
+
+    test "federation option true overrides schema's one" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        name
+      }
+      """
+
+      document =
+        Document.new(fragment,
+          type: :fragment,
+          schema: Test.FederationIgnoredSchema,
+          federation: true
+        )
+
+      assert :ok = Validator.validate(document)
+    end
+
+    test "schema_module.federation?/0 is used as default for fragments" do
+      fragment = "fragment UserFields on User { id name }"
+
+      assert :ok =
+               Validator.validate(fragment, "fragment.graphql", Test.FederationSchema, :fragment)
+    end
+
+    test "federation schema module reports federation? as true" do
+      assert Test.FederationSchema.federation?() == true
+    end
+
+    test "plain schema module reports federation? as false" do
+      assert Test.Schema.federation?() == false
+    end
+  end
 end
