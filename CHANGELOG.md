@@ -3,6 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+- Update apollo library
+- Make queries and fragments expand the schema before validation for `federation` schemas or option.
 
 ## [v0.4.0]
 ### Added
