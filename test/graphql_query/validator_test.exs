@@ -315,9 +315,7 @@ defmodule GraphqlQuery.ValidatorTest do
       assert Enum.all?(errors, &(not (&1.message =~ "cannot find directive")))
     end
 
-    test "federation: false on a federation schema produces directive errors" do
-      # Without federation support the schema's @link/@key/@shareable are unknown,
-      # so schema validation fails with directive-related errors.
+    test "federation: false on options are being overriden if the schema has federation" do
       query = """
       query GetUser($id: ID!) {
         user(id: $id) { id name }
@@ -325,8 +323,31 @@ defmodule GraphqlQuery.ValidatorTest do
       """
 
       document = Document.new(query, schema: Test.FederationSchema, federation: false)
+      assert :ok = Validator.validate(document)
+    end
+
+    test "error schema with federation not expanded" do
+      query = """
+      query GetUser($id: ID!) {
+        user(id: $id) { id name }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationIgnoredSchema, federation: false)
       assert {:error, errors} = Validator.validate(document)
-      assert Enum.any?(errors, &(&1.message =~ "cannot find directive"))
+      assert Enum.any?(errors, &(&1.message =~ "cannot find directive `@link`"))
+    end
+
+    test "federation option true overrides schema's one" do
+      query = """
+      query GetUser($id: ID!) {
+        user(id: $id) { id name }
+      }
+      """
+
+      document = Document.new(query, schema: Test.FederationIgnoredSchema, federation: true)
+
+      assert :ok = Validator.validate(document)
     end
 
     test "schema_module.federation?/0 is used as default when not set on document" do
@@ -409,19 +430,55 @@ defmodule GraphqlQuery.ValidatorTest do
       assert Enum.any?(errors, &(&1.message =~ "GhostType"))
     end
 
-    test "fragment on a federation schema with federation: false fails at the schema level" do
-      # Querying a field that is valid in the federation schema but validating the
-      # containing query (not just a fragment) without federation support fails
-      # because the schema itself cannot be built without the federation prelude.
-      query = """
-      query GetUser($id: ID!) {
-        user(id: $id) { id name }
+    test "federation: false on options are being overriden if the schema has federation" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        name
       }
       """
 
-      document = Document.new(query, schema: Test.FederationSchema, federation: false)
+      document =
+        Document.new(fragment, type: :fragment, schema: Test.FederationSchema, federation: false)
+
+      assert :ok = Validator.validate(document)
+    end
+
+    test "error schema with federation not expanded" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        name
+      }
+      """
+
+      document =
+        Document.new(fragment,
+          type: :fragment,
+          schema: Test.FederationIgnoredSchema,
+          federation: false
+        )
+
       assert {:error, errors} = Validator.validate(document)
-      assert Enum.any?(errors, &(&1.message =~ "cannot find directive"))
+      assert Enum.any?(errors, &(&1.message =~ "cannot find directive `@link`"))
+    end
+
+    test "federation option true overrides schema's one" do
+      fragment = """
+      fragment UserFields on User {
+        id
+        name
+      }
+      """
+
+      document =
+        Document.new(fragment,
+          type: :fragment,
+          schema: Test.FederationIgnoredSchema,
+          federation: true
+        )
+
+      assert :ok = Validator.validate(document)
     end
 
     test "schema_module.federation?/0 is used as default for fragments" do

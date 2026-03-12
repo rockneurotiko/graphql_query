@@ -46,14 +46,18 @@ defmodule GraphqlQuery.Validator do
   def validate(%Document{} = query) do
     path = query.path || "document.graphql"
 
-    validate(to_string(query), path, query.schema, query.type, federation: query.federation)
+    query
+    |> to_string()
+    |> validate(path, query.schema, query.type, federation: query.federation)
   end
 
   @spec validate(Fragment.t()) :: :ok | {:error, [validation_error()]}
-  def validate(%Fragment{} = query) do
-    path = query.path || "document.graphql"
+  def validate(%Fragment{} = fragment) do
+    path = fragment.path || "document.graphql"
 
-    validate(to_string(query), path, query.schema, :fragment)
+    fragment
+    |> to_string()
+    |> validate(path, fragment.schema, :fragment, federation: fragment.federation)
   end
 
   @doc """

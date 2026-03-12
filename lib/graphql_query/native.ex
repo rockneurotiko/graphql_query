@@ -53,7 +53,8 @@ defmodule GraphqlQuery.Native do
         _federation \\ false,
         _schema \\ nil,
         _schema_path \\ nil
-      ), do: error()
+      ),
+      do: error()
 
   @doc """
   Parses a GraphQL document and returns information about it.
