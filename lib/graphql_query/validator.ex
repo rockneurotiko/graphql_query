@@ -114,21 +114,27 @@ defmodule GraphqlQuery.Validator do
     |> clean_result()
   end
 
-  def validate(query, path, schema_module, :query, _opts)
+  def validate(query, path, schema_module, :query, opts)
       when is_binary(query) and is_binary(path) do
     schema = if schema_module, do: to_string(schema_module.schema())
     schema_path = if schema_module, do: schema_module.schema_path()
+    schema_federation = if schema_module, do: schema_module.federation?(), else: false
+    # Override false with schema_federation
+    federation = Keyword.get(opts, :federation, false) || schema_federation
 
-    Native.validate_query(query, path, schema, schema_path)
+    Native.validate_query(query, path, federation, schema, schema_path)
     |> clean_result()
   end
 
-  def validate(query, path, schema_module, :fragment, _opts)
+  def validate(query, path, schema_module, :fragment, opts)
       when is_binary(query) and is_binary(path) do
     schema = if schema_module, do: to_string(schema_module.schema())
     schema_path = if schema_module, do: schema_module.schema_path()
+    schema_federation = if schema_module, do: schema_module.federation?(), else: false
+    # Override false with schema_federation
+    federation = Keyword.get(opts, :federation, false) || schema_federation
 
-    Native.validate_fragment(query, path, schema, schema_path)
+    Native.validate_fragment(query, path, federation, schema, schema_path)
     |> clean_result()
   end
 
