@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Breaking changes
+- Now the library will warn if a query or fragment use @deprecated fields
+
+### Fixed
+- If a schema has warnings or errors, and they were ignored on the schema build, the queries/fragments that use the schema will ignore them too.
 
 ## [v0.4.1]
 - Update apollo library
