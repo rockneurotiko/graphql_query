@@ -1,8 +1,8 @@
 <h1><p align="center"><img src="graphql_query.png" alt="GraphQL Query" width="350"></p></h1>
 
 ![CI](https://github.com/rockneurotiko/graphql_query/actions/workflows/ci.yml/badge.svg)
-[![Package](https://img.shields.io/hexpm/v/graphql_query.svg)](https://hex.pm/packages/graphql_query)
-[![Documentation](http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat)](https://hexdocs.pm/graphql_query)
+[![Package](https://img.shields.io/hexpm/v/graphql_query.svg?logo=elixir)](https://hex.pm/packages/graphql_query)
+[![Documentation](http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat&logo=elixir)](https://hexdocs.pm/graphql_query)
 
 <!-- MDOC -->
 
