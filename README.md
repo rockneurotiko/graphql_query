@@ -3,6 +3,8 @@
 ![CI](https://github.com/rockneurotiko/graphql_query/actions/workflows/ci.yml/badge.svg)
 [![Package](https://img.shields.io/hexpm/v/graphql_query.svg?logo=elixir)](https://hex.pm/packages/graphql_query)
 [![Documentation](http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat&logo=elixir)](https://hexdocs.pm/graphql_query)
+[![Hex.pm](https://img.shields.io/hexpm/dt/graphql_query.svg)](https://hex.pm/packages/graphql_query)
+[![Hex.pm](https://img.shields.io/hexpm/dw/graphql_query.svg)](https://hex.pm/packages/graphql_query)
 
 <!-- MDOC -->
 
