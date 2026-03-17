@@ -32,19 +32,19 @@ defmodule GraphqlQuery.Native do
 
   @doc """
   Validates a GraphQL query string with a document path and optional schema information.
-  Returns :ok if valid, {:error, [GraphqlQuery.ValidationError.t()]} if invalid with detailed error messages.
+  Returns {:ok, [GraphqlQuery.ValidationWarning.t()]} if valid (with any deprecation warnings), or {:error, [GraphqlQuery.ValidationError.t()]} if invalid with detailed error messages.
   """
   def validate_query(_query, _path, _schema_info \\ nil), do: error()
 
   @doc """
   Validates a GraphQL schema string with a document path.
-  Returns :ok if valid, {:error, [GraphqlQuery.ValidationError.t()]} if invalid with detailed error messages.
+  Returns {:ok, [GraphqlQuery.ValidationWarning.t()]} if valid (with any deprecation warnings), or {:error, [GraphqlQuery.ValidationError.t()]} if invalid with detailed error messages.
   """
   def validate_schema(_schema, _path, _federation \\ false), do: error()
 
   @doc """
   Validates a GraphQL fragment string with a document path and optional schema information.
-  Returns :ok with fragment information if valid, {:error, [GraphqlQuery.ValidationError.t()]} if invalid with detailed error messages.
+  Returns {:ok, [GraphqlQuery.ValidationWarning.t()]} if valid (with any deprecation warnings), or {:error, [GraphqlQuery.ValidationError.t()]} if invalid with detailed error messages.
   """
   def validate_fragment(_fragment, _path, _schema_info \\ nil), do: error()
 
