@@ -421,7 +421,7 @@ fn collect_warnings_from_selection_set(
                                 None
                             }
                         })
-                        .unwrap_or_else(|| "No longer supported".to_string());
+                        .unwrap_or_else(|| "".to_string());
 
                     let locations = node_field
                         .location()

@@ -12,6 +12,7 @@ defmodule Test.Schema do
     type User {
       id: ID!
       name: String!
+      oldName: String! @deprecated
       email: String!
       oldEmail: String! @deprecated(reason: "Use 'email' field instead")
     }
