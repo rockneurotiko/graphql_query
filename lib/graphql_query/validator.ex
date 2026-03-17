@@ -7,11 +7,19 @@ defmodule GraphqlQuery.Validator do
   validation when a schema module is provided.
   """
 
-  alias GraphqlQuery.{Document, DocumentInfo, Fragment, Native}
+  alias GraphqlQuery.{
+    Document,
+    DocumentInfo,
+    Fragment,
+    Native,
+    SchemaInformation,
+    ValidationWarning
+  }
 
   @type document_type :: :query | :schema | :fragment
   @type document_info :: GraphqlQuery.DocumentInfo.t()
   @type validation_error :: GraphqlQuery.ValidationError.t()
+  @type validation_warning :: ValidationWarning.t()
 
   @doc """
   Validates GraphQL documents.
@@ -42,7 +50,8 @@ defmodule GraphqlQuery.Validator do
       :ok
   """
 
-  @spec validate(Document.t()) :: :ok | {:error, [validation_error()]}
+  @spec validate(Document.t()) ::
+          :ok | {:ok, [validation_warning()]} | {:error, [validation_error()]}
   def validate(%Document{} = query) do
     path = query.path || "document.graphql"
 
@@ -51,7 +60,8 @@ defmodule GraphqlQuery.Validator do
     |> validate(path, query.schema, query.type, federation: query.federation)
   end
 
-  @spec validate(Fragment.t()) :: :ok | {:error, [validation_error()]}
+  @spec validate(Fragment.t()) ::
+          :ok | {:ok, [validation_warning()]} | {:error, [validation_error()]}
   def validate(%Fragment{} = fragment) do
     path = fragment.path || "document.graphql"
 
@@ -107,7 +117,7 @@ defmodule GraphqlQuery.Validator do
   """
 
   @spec validate(String.t(), String.t(), module() | nil, document_type(), keyword()) ::
-          :ok | {:error, [validation_error()]}
+          :ok | {:ok, [validation_warning()]} | {:error, [validation_error()]}
   def validate(query, path, schema_module, type, opts \\ [])
 
   def validate(query, path, _schema_module, :schema, opts)
@@ -120,28 +130,36 @@ defmodule GraphqlQuery.Validator do
 
   def validate(query, path, schema_module, :query, opts)
       when is_binary(query) and is_binary(path) do
-    schema = if schema_module, do: to_string(schema_module.schema())
-    schema_path = if schema_module, do: schema_module.schema_path()
-    schema_federation = if schema_module, do: schema_module.federation?(), else: false
-    # Override false with schema_federation
-    federation = Keyword.get(opts, :federation, false) || schema_federation
+    schema_info = build_schema_info(schema_module, opts)
 
-    Native.validate_query(query, path, federation, schema, schema_path)
+    Native.validate_query(query, path, schema_info)
     |> clean_result()
   end
 
   def validate(query, path, schema_module, :fragment, opts)
       when is_binary(query) and is_binary(path) do
-    schema = if schema_module, do: to_string(schema_module.schema())
-    schema_path = if schema_module, do: schema_module.schema_path()
-    schema_federation = if schema_module, do: schema_module.federation?(), else: false
-    # Override false with schema_federation
-    federation = Keyword.get(opts, :federation, false) || schema_federation
+    schema_info = build_schema_info(schema_module, opts)
 
-    Native.validate_fragment(query, path, federation, schema, schema_path)
+    Native.validate_fragment(query, path, schema_info)
     |> clean_result()
   end
 
-  defp clean_result({:ok, :ok}), do: :ok
+  defp build_schema_info(nil, _opts), do: nil
+
+  defp build_schema_info(schema_module, opts) do
+    schema_doc = schema_module.schema()
+    schema_federation = schema_doc.federation
+    federation = Keyword.get(opts, :federation, false) || schema_federation
+
+    %SchemaInformation{
+      schema: to_string(schema_doc),
+      path: schema_module.schema_path(),
+      federation: federation,
+      ignore_errors: schema_doc.ignore? || false
+    }
+  end
+
+  defp clean_result({:ok, []}), do: :ok
+  defp clean_result({:ok, warnings}) when is_list(warnings), do: {:ok, warnings}
   defp clean_result(other), do: other
 end

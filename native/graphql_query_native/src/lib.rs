@@ -1,4 +1,6 @@
 use apollo_compiler::ast::{Definition, Document, Selection};
+use apollo_compiler::executable;
+use apollo_compiler::schema::SchemaBuilder;
 use apollo_compiler::validation::DiagnosticList;
 use apollo_compiler::validation::Valid;
 use apollo_compiler::ExecutableDocument;
@@ -13,6 +15,16 @@ mod federation;
 #[module = "GraphqlQuery.ValidationError"]
 pub struct ValidationError {
     pub message: String,
+    pub locations: Vec<Location>,
+}
+
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.ValidationWarning"]
+pub struct ValidationWarning {
+    pub kind: String,
+    pub message: String,
+    pub field: String,
+    pub parent_type: String,
     pub locations: Vec<Location>,
 }
 
@@ -65,10 +77,82 @@ pub struct DocumentInfo {
     pub signature: Option<String>,
 }
 
-mod atoms {
-    rustler::atoms! {
-        ok,
-        error,
+#[derive(Debug, Clone, rustler::NifStruct)]
+#[module = "GraphqlQuery.SchemaInformation"]
+pub struct SchemaInformation {
+    pub schema: String,
+    pub path: Option<String>,
+    pub federation: bool,
+    pub ignore_errors: bool,
+}
+
+/// Return type of `validate_document_with_schema`.
+/// The `Err` variant is boxed to keep it small (avoids `clippy::result_large_err`).
+type DocumentValidationResult = Result<
+    (Valid<ExecutableDocument>, Vec<ValidationWarning>),
+    Box<(ExecutableDocument, Vec<ValidationError>)>,
+>;
+
+/// Conditionally adds a federation prelude to a `SchemaBuilder`.
+///
+/// If `info.federation` is true and the schema contains a known `@link` federation
+/// directive, generates the federation prelude SDL and appends it to the builder.
+/// Returns the builder unchanged if federation is disabled, no known `@link` is found,
+/// or AST parsing fails (build() will catch any errors later).
+fn maybe_add_federation(info: &SchemaInformation, builder: SchemaBuilder) -> SchemaBuilder {
+    if !info.federation {
+        return builder;
+    }
+
+    let schema_path = info.path.as_deref().unwrap_or("schema.graphql");
+
+    let Ok(document) = apollo_compiler::ast::Document::parse(&info.schema, schema_path) else {
+        return builder;
+    };
+
+    let links = federation::extract_link_directives(&document);
+    let fed_link = links
+        .iter()
+        .find(|l| l.spec.identity == federation::SpecIdentity::Federation);
+
+    match fed_link {
+        Some(link) if federation::is_known_version(&link.spec.version) => {
+            let prelude = federation::generate_prelude(&links);
+            builder.parse(&prelude, "federation_prelude.graphql")
+        }
+        _ => builder,
+    }
+}
+
+/// Resolves a `SchemaInformation` into a `Valid<Schema>`.
+///
+/// Pipeline: parse schema → maybe add federation prelude → build → maybe validate.
+/// When `ignore_errors` is true, both `build()` errors and `validate()` errors are
+/// suppressed — the partial schema is used with `assume_valid`. This is safe because
+/// the schema was already validated (or explicitly ignored) at its own compile time.
+fn resolve_schema(info: &SchemaInformation) -> Result<Valid<Schema>, Vec<ValidationError>> {
+    let schema_path = info.path.as_deref().unwrap_or("schema.graphql");
+
+    let builder = maybe_add_federation(
+        info,
+        Schema::builder().parse(info.schema.to_string(), schema_path),
+    );
+
+    if info.ignore_errors {
+        // When ignoring errors: use the partial schema even if build() fails
+        let schema = match builder.build() {
+            Ok(s) => s,
+            Err(with_errors) => with_errors.partial,
+        };
+        Ok(Valid::assume_valid(schema))
+    } else {
+        let schema = builder
+            .build()
+            .map_err(|e| diagnostics_to_validation_errors(e.errors))?;
+
+        schema
+            .validate()
+            .map_err(|e| diagnostics_to_validation_errors(e.errors))
     }
 }
 
@@ -144,8 +228,8 @@ fn parse_schema_maybe_federation(
 fn validate_schema_with_federation(
     schema_str: &str,
     path: &str,
-) -> Result<rustler::Atom, Vec<ValidationError>> {
-    parse_schema_maybe_federation(schema_str, path, true).map(|_| atoms::ok())
+) -> Result<Vec<ValidationWarning>, Vec<ValidationError>> {
+    parse_schema_maybe_federation(schema_str, path, true).map(|_| vec![])
 }
 
 fn diagnostics_to_validation_errors(diagnostics: DiagnosticList) -> Vec<ValidationError> {
@@ -270,46 +354,186 @@ fn document_information(
     parse_query(&document, &path).map(|doc| extract_operation_info(&doc))
 }
 
+fn collect_deprecated_field_warnings(document: &ExecutableDocument) -> Vec<ValidationWarning> {
+    let mut warnings = Vec::new();
+    let mut visited_fragments: HashSet<String> = HashSet::new();
+
+    // Walk all named operations
+    for (_name, operation) in &document.operations.named {
+        collect_warnings_from_selection_set(
+            &operation.selection_set,
+            document,
+            &mut warnings,
+            &mut visited_fragments,
+        );
+    }
+
+    // Walk anonymous operation if present
+    if let Some(operation) = &document.operations.anonymous {
+        collect_warnings_from_selection_set(
+            &operation.selection_set,
+            document,
+            &mut warnings,
+            &mut visited_fragments,
+        );
+    }
+
+    // Walk top-level fragment definitions (for standalone fragment validation)
+    for (name, fragment) in &document.fragments {
+        if !visited_fragments.contains(name.as_str()) {
+            visited_fragments.insert(name.to_string());
+            collect_warnings_from_selection_set(
+                &fragment.selection_set,
+                document,
+                &mut warnings,
+                &mut visited_fragments,
+            );
+        }
+    }
+
+    warnings
+}
+
+fn collect_warnings_from_selection_set(
+    selection_set: &executable::SelectionSet,
+    document: &ExecutableDocument,
+    warnings: &mut Vec<ValidationWarning>,
+    visited_fragments: &mut HashSet<String>,
+) {
+    let parent_type = selection_set.ty.as_str().to_string();
+
+    for selection in &selection_set.selections {
+        match selection {
+            executable::Selection::Field(node_field) => {
+                let field_def = &node_field.definition;
+
+                // Check if the field definition has a @deprecated directive
+                let deprecated_directive =
+                    field_def.directives.iter().find(|d| d.name == "deprecated");
+
+                if let Some(directive) = deprecated_directive {
+                    let reason = directive
+                        .specified_argument_by_name("reason")
+                        .and_then(|v| {
+                            if let apollo_compiler::ast::Value::String(s) = v.as_ref() {
+                                Some(s.as_str().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| "No longer supported".to_string());
+
+                    let locations = node_field
+                        .location()
+                        .and_then(|loc| loc.line_column(&document.sources))
+                        .map(|lc| {
+                            vec![Location {
+                                line: lc.line,
+                                column: lc.column,
+                            }]
+                        })
+                        .unwrap_or_default();
+
+                    warnings.push(ValidationWarning {
+                        kind: "deprecated_field".to_string(),
+                        message: reason,
+                        field: node_field.name.to_string(),
+                        parent_type: parent_type.clone(),
+                        locations,
+                    });
+                }
+
+                // Recurse into sub-selections
+                collect_warnings_from_selection_set(
+                    &node_field.selection_set,
+                    document,
+                    warnings,
+                    visited_fragments,
+                );
+            }
+            executable::Selection::InlineFragment(inline) => {
+                collect_warnings_from_selection_set(
+                    &inline.selection_set,
+                    document,
+                    warnings,
+                    visited_fragments,
+                );
+            }
+            executable::Selection::FragmentSpread(spread) => {
+                let frag_name = spread.fragment_name.as_str().to_string();
+                if !visited_fragments.contains(&frag_name) {
+                    visited_fragments.insert(frag_name.clone());
+                    if let Some(fragment) = document.fragments.get(&spread.fragment_name) {
+                        collect_warnings_from_selection_set(
+                            &fragment.selection_set,
+                            document,
+                            warnings,
+                            visited_fragments,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn validate_query_without_schema(
     query: String,
     path: String,
-) -> Result<rustler::Atom, Vec<ValidationError>> {
+) -> Result<Vec<ValidationWarning>, Vec<ValidationError>> {
     let document = parse_query(&query, &path)?;
 
     // Use apollo-compiler's standalone validation
     document
         .validate_standalone_executable()
-        .map(|_| atoms::ok())
+        .map(|_| vec![])
         .map_err(diagnostics_to_validation_errors)
 }
 
-fn validate_query_with_schema(
-    schema: String,
-    schema_path: String,
+/// Parses a schema (via `resolve_schema`) and validates an executable document against it.
+/// Returns `Ok((document, warnings))` on success, or `Err((partial_document, errors))`
+/// if there are validation errors. The partial document is included on failure so callers
+/// can still inspect it (e.g. to collect deprecation warnings despite "unused fragment" errors).
+fn validate_document_with_schema(
+    schema_info: &SchemaInformation,
     query: String,
     path: String,
-    federation: bool,
-) -> Result<rustler::Atom, Vec<ValidationError>> {
-    let schema = parse_schema_maybe_federation(&schema, &schema_path, federation)?;
+) -> DocumentValidationResult {
+    let schema = resolve_schema(schema_info).map_err(|errors| {
+        // Schema parse/build failure: no document available
+        Box::new((ExecutableDocument::default(), errors))
+    })?;
 
-    ExecutableDocument::parse_and_validate(&schema, query, path)
-        .map(|_| atoms::ok())
-        .map_err(|diagnostics| diagnostics_to_validation_errors(diagnostics.errors))
+    match ExecutableDocument::parse_and_validate(&schema, query, path) {
+        Ok(valid_doc) => {
+            let warnings = collect_deprecated_field_warnings(&valid_doc);
+            Ok((valid_doc, warnings))
+        }
+        Err(with_errors) => {
+            let errors = diagnostics_to_validation_errors(with_errors.errors);
+            Err(Box::new((with_errors.partial, errors)))
+        }
+    }
+}
+
+fn validate_query_with_schema(
+    schema_info: &SchemaInformation,
+    query: String,
+    path: String,
+) -> Result<Vec<ValidationWarning>, Vec<ValidationError>> {
+    validate_document_with_schema(schema_info, query, path)
+        .map(|(_, warnings)| warnings)
+        .map_err(|e| e.1)
 }
 
 #[rustler::nif]
 fn validate_query(
     query: String,
     path: String,
-    federation: bool,
-    schema: Option<String>,
-    schema_path: Option<String>,
-) -> Result<rustler::Atom, Vec<ValidationError>> {
-    match schema {
-        Some(schema) => {
-            let schema_path = schema_path.unwrap_or_else(|| "schema.graphql".to_string());
-            validate_query_with_schema(schema, schema_path, query, path, federation)
-        }
+    schema_info: Option<SchemaInformation>,
+) -> Result<Vec<ValidationWarning>, Vec<ValidationError>> {
+    match schema_info {
+        Some(ref info) => validate_query_with_schema(info, query, path),
         None => validate_query_without_schema(query, path),
     }
 }
@@ -319,11 +543,11 @@ fn validate_schema(
     schema: String,
     path: String,
     federation: bool,
-) -> Result<rustler::Atom, Vec<ValidationError>> {
+) -> Result<Vec<ValidationWarning>, Vec<ValidationError>> {
     if federation {
         validate_schema_with_federation(&schema, &path)
     } else {
-        parse_schema(&schema, &path).map(|_| atoms::ok())
+        parse_schema(&schema, &path).map(|_| vec![])
     }
 }
 
@@ -331,34 +555,47 @@ fn validate_schema(
 fn validate_fragment(
     fragment: String,
     path: String,
-    federation: bool,
-    schema: Option<String>,
-    schema_path: Option<String>,
-) -> Result<rustler::Atom, Vec<ValidationError>> {
-    let validation_result = match schema {
-        Some(schema) => {
-            let schema_path = schema_path.unwrap_or_else(|| "schema.graphql".to_string());
-            validate_query_with_schema(schema, schema_path, fragment, path, federation)
-        }
-        None => validate_query_without_schema(fragment, path),
-    };
-
+    schema_info: Option<SchemaInformation>,
+) -> Result<Vec<ValidationWarning>, Vec<ValidationError>> {
     let unused_fragment_regex = Regex::new(r"fragment `.*` must be used in an operation").unwrap();
 
-    match validation_result {
-        Ok(_) => Ok(atoms::ok()),
-        Err(errors) => {
-            let filtered_errors = errors
-                .into_iter()
-                .filter(|e| !unused_fragment_regex.is_match(&e.message))
-                .collect::<Vec<ValidationError>>();
+    match schema_info {
+        Some(ref info) => {
+            match validate_document_with_schema(info, fragment, path) {
+                Ok((_, warnings)) => Ok(warnings),
+                Err(boxed) => {
+                    let (partial_doc, errors) = *boxed;
+                    let filtered_errors: Vec<ValidationError> = errors
+                        .into_iter()
+                        .filter(|e| !unused_fragment_regex.is_match(&e.message))
+                        .collect();
 
-            if filtered_errors.is_empty() {
-                Ok(atoms::ok())
-            } else {
-                Err(filtered_errors)
+                    if filtered_errors.is_empty() {
+                        // The only errors were "unused fragment" — still collect deprecation warnings
+                        // from the partial document (which has the fragment's selections).
+                        let warnings = collect_deprecated_field_warnings(&partial_doc);
+                        Ok(warnings)
+                    } else {
+                        Err(filtered_errors)
+                    }
+                }
             }
         }
+        None => match validate_query_without_schema(fragment, path) {
+            Ok(warnings) => Ok(warnings),
+            Err(errors) => {
+                let filtered_errors: Vec<ValidationError> = errors
+                    .into_iter()
+                    .filter(|e| !unused_fragment_regex.is_match(&e.message))
+                    .collect();
+
+                if filtered_errors.is_empty() {
+                    Ok(vec![])
+                } else {
+                    Err(filtered_errors)
+                }
+            }
+        },
     }
 }
 
@@ -576,7 +813,13 @@ mod tests {
         query_path: &str,
         federation: bool,
     ) -> Result<(), Vec<ValidationError>> {
-        let schema = parse_schema_maybe_federation(schema_str, schema_path, federation)?;
+        let info = SchemaInformation {
+            schema: schema_str.to_string(),
+            path: Some(schema_path.to_string()),
+            federation,
+            ignore_errors: false,
+        };
+        let schema = resolve_schema(&info)?;
 
         ExecutableDocument::parse_and_validate(&schema, query, query_path)
             .map(|_| ())

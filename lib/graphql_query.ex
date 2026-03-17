@@ -7,7 +7,7 @@ defmodule GraphqlQuery do
              |> Enum.fetch!(1)
              |> String.replace("](#", "](#module-")
 
-  alias __MODULE__.{Parser, Document, Fragment, Validator}
+  alias __MODULE__.{Parser, Document, Fragment, Validator, ValidationError, ValidationWarning}
 
   require GraphqlQuery.Logger
   defguardp ast?(value) when is_tuple(value) and tuple_size(value) == 3
@@ -1083,8 +1083,28 @@ defmodule GraphqlQuery do
       query = Document.new(calculated_query, query_opts)
 
       with {:ignore, ignore} when not ignore <- {:ignore, opts[:ignore]},
-           :ok <- Validator.validate(query) do
-        query
+           result when result == :ok or (is_tuple(result) and elem(result, 0) == :ok) <-
+             Validator.validate(query) do
+        case result do
+          :ok ->
+            query
+
+          {:ok, warnings} ->
+            Enum.each(warnings, fn warning ->
+              message = GraphqlQuery.format_warning(warning)
+
+              error =
+                GraphqlQuery.Parser.format_error(
+                  %GraphqlQuery.ValidationError{message: message, locations: warning.locations},
+                  unquote(warn_location),
+                  :runtime
+                )
+
+              GraphqlQuery.Logger.warning(error.message, error.location)
+            end)
+
+            query
+        end
       else
         {:ignore, true} ->
           query
@@ -1104,6 +1124,10 @@ defmodule GraphqlQuery do
   defp do_validate(document, warn_location, source \\ :macro) do
     case Validator.validate(document) do
       :ok ->
+        document
+
+      {:ok, warnings} ->
+        print_typed_warnings(warnings, warn_location)
         document
 
       {:error, errors} ->
@@ -1128,6 +1152,38 @@ defmodule GraphqlQuery do
 
       GraphqlQuery.Logger.warning(error.message, error.location)
     end)
+  end
+
+  defp print_typed_warnings(warnings, warn_location) do
+    Enum.each(warnings, fn warning ->
+      message = GraphqlQuery.format_warning(warning)
+
+      error =
+        Parser.format_error(
+          %ValidationError{message: message, locations: warning.locations},
+          warn_location,
+          ""
+        )
+
+      GraphqlQuery.Logger.warning(error.message, error.location)
+    end)
+  end
+
+  @doc """
+  Formats a `GraphqlQuery.ValidationWarning` into a human-readable string.
+
+  The message format depends on the warning `kind`:
+
+    * `"deprecated_field"` — `"Field 'fieldName' on type 'TypeName' is deprecated: reason"`
+    * other kinds — `"Warning (kind): message"`
+
+  """
+  def format_warning(%ValidationWarning{kind: "deprecated_field"} = w) do
+    "Field '#{w.field}' on type '#{w.parent_type}' is deprecated: #{w.message}"
+  end
+
+  def format_warning(%ValidationWarning{} = w) do
+    "Warning (#{w.kind}): #{w.message}"
   end
 
   defp error_msg_invalid_fragment(ast, :document) do

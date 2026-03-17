@@ -8,6 +8,142 @@ defmodule GraphqlQueryTest do
   alias GraphqlQuery.{Document, Fragment}
 
   describe "document_with_options/2" do
+    test "should not warn on schema errors when they are ignored on schema" do
+      ast =
+        quote do
+          import GraphqlQuery
+
+          document_with_options schema: Test.ErrorSchema do
+            ~GQL"""
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                email
+              }
+            }
+            """
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      assert logs == ""
+    end
+
+    test "deprecated field usage emits a compile-time warning" do
+      ast =
+        quote do
+          import GraphqlQuery
+
+          document_with_options schema: Test.Schema do
+            ~GQL"""
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                email
+                oldEmail
+              }
+            }
+            """
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      assert logs =~ "Field 'oldEmail' on type 'User' is deprecated: Use 'email' field instead"
+    end
+
+    test "no warning when no deprecated fields are used" do
+      ast =
+        quote do
+          import GraphqlQuery
+
+          document_with_options schema: Test.Schema do
+            ~GQL"""
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                email
+              }
+            }
+            """
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      assert logs == ""
+    end
+
+    test "no deprecation warning when no schema is provided" do
+      ast =
+        quote do
+          import GraphqlQuery
+
+          ~GQL"""
+          query GetUser($id: ID!) {
+            user(id: $id) {
+              oldEmail
+            }
+          }
+          """i
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      assert logs == ""
+    end
+
+    test "deprecated field in fragment emits a compile-time warning" do
+      ast =
+        quote do
+          import GraphqlQuery
+
+          document_with_options schema: Test.Schema do
+            ~GQL"""
+            fragment UserFields on User {
+              email
+              oldEmail
+            }
+            """f
+          end
+        end
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_quoted(ast)
+        end)
+
+      assert logs =~ "Field 'oldEmail' on type 'User' is deprecated: Use 'email' field instead"
+    end
+
+    test "deprecated field usage emits a runtime warning" do
+      logs =
+        capture_log(fn ->
+          document_with_options schema: Test.Schema, runtime: true do
+            ~GQL"""
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                email
+                oldEmail
+              }
+            }
+            """
+          end
+        end)
+
+      assert logs =~ "Field 'oldEmail' on type 'User' is deprecated: Use 'email' field instead"
+    end
+
     test "adds options to ~GQL sigil" do
       query =
         document_with_options ignore: true do
