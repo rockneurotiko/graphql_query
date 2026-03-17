@@ -232,6 +232,44 @@ defmodule GraphqlQuery.SchemaTest do
       assert Validator.validate(schema, "schema.graphql", nil, :schema) == :ok
     end
 
+    test "expands federation directives in schema validation" do
+      schema = """
+      extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@shareable", "@external", "@requires"])
+
+      type User @key(fields: "id") {
+        id: ID!
+        name: String! @shareable
+        email: String!
+      }
+
+      type Query {
+        user(id: ID!): User
+      }
+      """
+
+      assert Validator.validate(schema, "schema.graphql", nil, :schema, federation: true) == :ok
+    end
+
+    test "ignore duplicated directive from @link import and explicit declaration" do
+      schema = """
+      extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@shareable", "@external", "@requires"])
+
+      type User @key(fields: "id") {
+        id: ID!
+        name: String! @shareable
+        email: String!
+      }
+
+      type Query {
+        user(id: ID!): User
+      }
+
+      directive @key(fields: String!) on OBJECT | INTERFACE
+      """
+
+      assert Validator.validate(schema, "schema.graphql", nil, :schema, federation: true) == :ok
+    end
+
     test "detects schema validation errors" do
       invalid_schema = """
       type Query {
