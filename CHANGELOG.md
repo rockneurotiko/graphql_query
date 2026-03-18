@@ -3,6 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v0.5.0]
 ### Breaking changes
 - Now the library will warn if a query or fragment use @deprecated fields
 
