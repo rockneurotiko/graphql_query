@@ -67,9 +67,10 @@ clippy:
 docs-check-modules:
     ./bin/check_modules_docs.sh
 
+[private]
 [parallel]
 [group('lint')]
-lint: credo dialyzer clippy docs-check-modules
+lint-checks: credo dialyzer clippy docs-check-modules
 
 [group('lint')]
-ci: format lint
+lint: compile format lint-checks
