@@ -326,16 +326,17 @@ defmodule GraphqlQuery.ValidatorTest do
       assert :ok = Validator.validate(document)
     end
 
-    test "error schema with federation not expanded" do
+    test "ignored schema suppresses errors when federation not expanded" do
       query = """
       query GetUser($id: ID!) {
         user(id: $id) { id name }
       }
       """
 
+      # FederationIgnoredSchema has ignore?: true, so schema errors are suppressed
+      # even when federation: false is passed (unknown @link directive is ignored)
       document = Document.new(query, schema: Test.FederationIgnoredSchema, federation: false)
-      assert {:error, errors} = Validator.validate(document)
-      assert Enum.any?(errors, &(&1.message =~ "cannot find directive `@link`"))
+      assert :ok = Validator.validate(document)
     end
 
     test "federation option true overrides schema's one" do
@@ -444,7 +445,7 @@ defmodule GraphqlQuery.ValidatorTest do
       assert :ok = Validator.validate(document)
     end
 
-    test "error schema with federation not expanded" do
+    test "ignored schema suppresses errors when federation not expanded" do
       fragment = """
       fragment UserFields on User {
         id
@@ -452,6 +453,8 @@ defmodule GraphqlQuery.ValidatorTest do
       }
       """
 
+      # FederationIgnoredSchema has ignore?: true, so schema errors are suppressed
+      # even when federation: false is passed (unknown @link directive is ignored)
       document =
         Document.new(fragment,
           type: :fragment,
@@ -459,8 +462,7 @@ defmodule GraphqlQuery.ValidatorTest do
           federation: false
         )
 
-      assert {:error, errors} = Validator.validate(document)
-      assert Enum.any?(errors, &(&1.message =~ "cannot find directive `@link`"))
+      assert :ok = Validator.validate(document)
     end
 
     test "federation option true overrides schema's one" do

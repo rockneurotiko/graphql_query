@@ -81,7 +81,9 @@ defmodule GraphqlQuery.MixProject do
           GraphqlQuery.Fragment,
           GraphqlQuery.FragmentInfo,
           GraphqlQuery.MutationInfo,
-          GraphqlQuery.SubscriptionInfo
+          GraphqlQuery.SubscriptionInfo,
+          GraphqlQuery.SchemaInformation,
+          GraphqlQuery.ValidationWarning
         ],
         Format: [
           GraphqlQuery.Formatter,
