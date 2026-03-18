@@ -1,3 +1,5 @@
+set shell := ["sh", "-euc"]
+
 manifest-path := "./native/graphql_query_native/Cargo.toml"
 
 [group('general')]
@@ -74,3 +76,9 @@ lint-checks: credo dialyzer clippy docs-check-modules
 
 [group('lint')]
 lint: compile format lint-checks
+
+[group('release')]
+fetch-checksums:
+    rm -rf native/graphql_query_native/target
+    FORCE_BUILD=true mix compile --force
+    FORCE_BUILD=true mix rustler_precompiled.download GraphqlQuery.Native --all --print
