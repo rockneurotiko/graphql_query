@@ -1,7 +1,7 @@
 use apollo_compiler::ast::{Definition, Document, Value};
 use apollo_compiler::Node;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Identifies which spec a @link directive points to
 #[derive(Debug, Clone, PartialEq)]
@@ -138,6 +138,25 @@ pub fn extract_link_directives(document: &Document) -> Vec<LinkDirective> {
     }
 
     link_directives
+}
+
+/// Extract the names of all directives, scalars, and enums explicitly defined in
+/// the user's schema document.
+///
+/// This is used to avoid re-emitting prelude definitions that the user has
+/// already declared themselves — which the GraphQL spec allows so that engines that
+/// don't handle `@link` imports correctly can still validate the schema.
+pub fn extract_user_defined_names(document: &Document) -> HashSet<String> {
+    document
+        .definitions
+        .iter()
+        .filter_map(|def| match def {
+            Definition::DirectiveDefinition(d) => Some(d.name.to_string()),
+            Definition::ScalarTypeDefinition(s) => Some(s.name.to_string()),
+            Definition::EnumTypeDefinition(e) => Some(e.name.to_string()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Parse a single @link directive into a LinkDirective struct
@@ -440,8 +459,13 @@ pub fn is_known_version(version: &Option<String>) -> bool {
     }
 }
 
-/// Generate the SDL prelude for all @link directives
-pub fn generate_prelude(links: &[LinkDirective]) -> String {
+/// Generate the SDL prelude for all @link directives.
+///
+/// `user_definitions` is the set of directive, scalar, and enum names that the
+/// user's schema already explicitly defines.  Any name in that set will be skipped
+/// in the generated prelude so that we don't emit a duplicate definition — which
+/// the GraphQL spec allows (an explicit declaration overrides the `@link`-imported one).
+pub fn generate_prelude(links: &[LinkDirective], user_definitions: &HashSet<String>) -> String {
     let mut prelude = String::new();
 
     // Find the link spec and federation spec
@@ -453,19 +477,22 @@ pub fn generate_prelude(links: &[LinkDirective]) -> String {
     // Always inject @link directive definition if we're in federation mode
     // (even if no explicit @link to the link spec is present)
     if link_spec.is_some() || fed_spec.is_some() {
-        prelude.push_str(&generate_link_spec_prelude(link_spec));
+        prelude.push_str(&generate_link_spec_prelude(link_spec, user_definitions));
     }
 
     // Generate federation prelude if present
     if let Some(fed_link) = fed_spec {
-        prelude.push_str(&generate_federation_prelude(fed_link));
+        prelude.push_str(&generate_federation_prelude(fed_link, user_definitions));
     }
 
     prelude
 }
 
 /// Generate the prelude for the @link spec itself
-fn generate_link_spec_prelude(link_spec: Option<&LinkDirective>) -> String {
+fn generate_link_spec_prelude(
+    link_spec: Option<&LinkDirective>,
+    user_definitions: &HashSet<String>,
+) -> String {
     let mut prelude = String::new();
 
     // The @link directive is always named "@link" (it's self-defining)
@@ -484,17 +511,28 @@ fn generate_link_spec_prelude(link_spec: Option<&LinkDirective>) -> String {
         "link__Purpose".to_string()
     };
 
-    prelude.push_str(&format!("scalar {import_scalar}\n"));
-    prelude.push_str(&format!("enum {purpose_enum} {{ SECURITY EXECUTION }}\n"));
-    prelude.push_str(&format!(
-        "directive @{directive_name}(url: String!, as: String, for: {purpose_enum}, import: [{import_scalar}]) repeatable on SCHEMA\n\n",
-    ));
+    if !user_definitions.contains(&import_scalar) {
+        prelude.push_str(&format!("scalar {import_scalar}\n"));
+    }
+    if !user_definitions.contains(&purpose_enum) {
+        prelude.push_str(&format!("enum {purpose_enum} {{ SECURITY EXECUTION }}\n"));
+    }
+
+    // Only emit the @link directive definition if the user hasn't already declared it
+    if !user_definitions.contains(directive_name) {
+        prelude.push_str(&format!(
+            "directive @{directive_name}(url: String!, as: String, for: {purpose_enum}, import: [{import_scalar}]) repeatable on SCHEMA\n\n",
+        ));
+    }
 
     prelude
 }
 
 /// Generate the prelude for federation directives
-fn generate_federation_prelude(fed_link: &LinkDirective) -> String {
+fn generate_federation_prelude(
+    fed_link: &LinkDirective,
+    user_definitions: &HashSet<String>,
+) -> String {
     let mut prelude = String::new();
     let version = fed_link.spec.version.as_deref().unwrap_or("v2.0");
 
@@ -515,24 +553,32 @@ fn generate_federation_prelude(fed_link: &LinkDirective) -> String {
 
     // Generate supporting scalars
     let fieldset_name = resolve_type_name_from_map("FieldSet", &type_import_map, &fed_link.prefix);
-    prelude.push_str(&format!("scalar {fieldset_name}\n"));
+    if !user_definitions.contains(&fieldset_name) {
+        prelude.push_str(&format!("scalar {fieldset_name}\n"));
+    }
 
     if version_gte(version, "v2.5") {
         let scope_name =
             resolve_type_name_from_map("federation__Scope", &type_import_map, &fed_link.prefix);
-        prelude.push_str(&format!("scalar {scope_name}\n"));
+        if !user_definitions.contains(&scope_name) {
+            prelude.push_str(&format!("scalar {scope_name}\n"));
+        }
     }
 
     if version_gte(version, "v2.6") {
         let policy_name =
             resolve_type_name_from_map("federation__Policy", &type_import_map, &fed_link.prefix);
-        prelude.push_str(&format!("scalar {policy_name}\n"));
+        if !user_definitions.contains(&policy_name) {
+            prelude.push_str(&format!("scalar {policy_name}\n"));
+        }
     }
 
     if version_gte(version, "v2.8") {
         let context_name =
             resolve_type_name_from_map("ContextFieldValue", &type_import_map, &fed_link.prefix);
-        prelude.push_str(&format!("scalar {context_name}\n"));
+        if !user_definitions.contains(&context_name) {
+            prelude.push_str(&format!("scalar {context_name}\n"));
+        }
     }
 
     prelude.push('\n');
@@ -547,6 +593,13 @@ fn generate_federation_prelude(fed_link: &LinkDirective) -> String {
             // Not imported - use namespaced name
             format!("{}__{}", fed_link.prefix, directive.name)
         };
+
+        // Skip directives that the user has already explicitly defined in their schema.
+        // Per the GraphQL spec, an explicit declaration overrides the @link-imported one,
+        // allowing schemas to support engines that don't handle @link imports correctly.
+        if user_definitions.contains(&directive_name) {
+            continue;
+        }
 
         // Resolve type references in arguments
         let mut arguments = directive.arguments.to_string();
@@ -866,7 +919,7 @@ mod tests {
 
     #[test]
     fn test_generate_link_spec_prelude_default() {
-        let prelude = generate_link_spec_prelude(None);
+        let prelude = generate_link_spec_prelude(None, &HashSet::new());
         assert!(prelude.contains("scalar link__Import"));
         assert!(prelude.contains("enum link__Purpose { SECURITY EXECUTION }"));
         assert!(prelude.contains("directive @link(url: String!"));
@@ -927,7 +980,7 @@ mod tests {
             }],
         };
 
-        let prelude = generate_federation_prelude(&link);
+        let prelude = generate_federation_prelude(&link, &HashSet::new());
         assert!(prelude.contains("scalar FieldSet"));
         assert!(prelude.contains("directive @key(fields: FieldSet!"));
         assert!(prelude.contains("directive @federation__requires"));
@@ -951,7 +1004,7 @@ mod tests {
             }],
         };
 
-        let prelude = generate_federation_prelude(&link);
+        let prelude = generate_federation_prelude(&link, &HashSet::new());
         assert!(prelude.contains("directive @key(fields: FieldSet!"));
         assert!(prelude.contains("directive @fed__requires"));
         assert!(prelude.contains("directive @fed__provides"));
@@ -970,7 +1023,7 @@ mod tests {
             imports: vec![],
         };
 
-        let prelude = generate_federation_prelude(&link);
+        let prelude = generate_federation_prelude(&link, &HashSet::new());
         assert!(prelude.contains("directive @federation__key"));
         assert!(prelude.contains("directive @federation__requires"));
         assert!(prelude.contains("directive @federation__provides"));
@@ -1004,7 +1057,7 @@ mod tests {
             }],
         };
 
-        let prelude = generate_prelude(&[link, fed]);
+        let prelude = generate_prelude(&[link, fed], &HashSet::new());
         assert!(prelude.contains("scalar link__Import"));
         assert!(prelude.contains("directive @link(url: String!"));
         assert!(prelude.contains("scalar FieldSet"));

@@ -117,7 +117,8 @@ fn maybe_add_federation(info: &SchemaInformation, builder: SchemaBuilder) -> Sch
 
     match fed_link {
         Some(link) if federation::is_known_version(&link.spec.version) => {
-            let prelude = federation::generate_prelude(&links);
+            let user_definitions = federation::extract_user_defined_names(&document);
+            let prelude = federation::generate_prelude(&links, &user_definitions);
             builder.parse(&prelude, "federation_prelude.graphql")
         }
         _ => builder,
@@ -209,8 +210,10 @@ fn parse_schema_maybe_federation(
         return parse_schema(schema_str, schema_path);
     }
 
-    // 6. Generate the prelude SDL
-    let prelude = federation::generate_prelude(&links);
+    // 6. Extract user-defined names (directives, scalars, enums) and generate the prelude SDL,
+    //    skipping any definitions already declared in the user's schema (per-spec override support).
+    let user_definitions = federation::extract_user_defined_names(&document);
+    let prelude = federation::generate_prelude(&links, &user_definitions);
 
     // 7. Build schema with prelude + user SDL
     let schema = Schema::builder()
