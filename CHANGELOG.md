@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - If a schema has warnings or errors, and they were ignored on the schema build, the queries/fragments that use the schema will ignore them too.
-- If a schema imports directives with `@link` and declace them too, do not add them to the prelude, otherwise it fails with duplicated directive, but it's a valid usecase.
+- If a schema imports directives with `@link` and also declares them, do not add them to the prelude, otherwise it fails with duplicated directive, but it's a valid use case. It also applies to scalars and enums.
 
 ## [v0.4.1]
 - Update apollo library

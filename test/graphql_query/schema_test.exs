@@ -264,7 +264,8 @@ defmodule GraphqlQuery.SchemaTest do
         user(id: ID!): User
       }
 
-      directive @key(fields: String!) on OBJECT | INTERFACE
+      scalar FieldSet
+      directive @key(fields: FieldSet!, resolvable: Boolean = true) repeatable on OBJECT | INTERFACE
       """
 
       assert Validator.validate(schema, "schema.graphql", nil, :schema, federation: true) == :ok
