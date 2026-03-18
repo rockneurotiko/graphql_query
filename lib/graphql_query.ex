@@ -1178,6 +1178,10 @@ defmodule GraphqlQuery do
     * other kinds — `"Warning (kind): message"`
 
   """
+  def format_warning(%ValidationWarning{kind: "deprecated_field", message: ""} = w) do
+    "Field '#{w.field}' on type '#{w.parent_type}' is deprecated"
+  end
+
   def format_warning(%ValidationWarning{kind: "deprecated_field"} = w) do
     "Field '#{w.field}' on type '#{w.parent_type}' is deprecated: #{w.message}"
   end

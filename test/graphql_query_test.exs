@@ -41,6 +41,8 @@ defmodule GraphqlQueryTest do
             ~GQL"""
             query GetUser($id: ID!) {
               user(id: $id) {
+                name
+                oldName
                 email
                 oldEmail
               }
@@ -55,6 +57,8 @@ defmodule GraphqlQueryTest do
         end)
 
       assert logs =~ "Field 'oldEmail' on type 'User' is deprecated: Use 'email' field instead"
+      assert logs =~ "Field 'oldName' on type 'User' is deprecated"
+      refute logs =~ "Field 'oldName' on type 'User' is deprecated: "
     end
 
     test "no warning when no deprecated fields are used" do

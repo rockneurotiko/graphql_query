@@ -326,7 +326,7 @@ defmodule GraphqlQuery.ValidatorTest do
       assert :ok = Validator.validate(document)
     end
 
-    test "error schema with federation not expanded" do
+    test "ignored schema suppresses errors when federation not expanded" do
       query = """
       query GetUser($id: ID!) {
         user(id: $id) { id name }
@@ -445,7 +445,7 @@ defmodule GraphqlQuery.ValidatorTest do
       assert :ok = Validator.validate(document)
     end
 
-    test "error schema with federation not expanded" do
+    test "ignored schema suppresses errors when federation not expanded" do
       fragment = """
       fragment UserFields on User {
         id
