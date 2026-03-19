@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## [v0.5.1]
+### Fixed
+- Check static values for `runtime` and `ignore` when other options are not static
 
 ## [v0.5.0]
 ### Breaking changes
