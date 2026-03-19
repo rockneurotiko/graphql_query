@@ -324,7 +324,6 @@ defmodule GraphqlQueryTest do
           assert %Document{} = query
         end)
 
-      # Should have warnings because ignore: false overrides ignore: true
       assert logs == ""
     end
 

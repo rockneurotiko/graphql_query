@@ -1394,7 +1394,7 @@ defmodule GraphqlQuery do
 
   defp static_enabled?(opts, field, caller) when is_list(opts) do
     case validate_option_value(field, Keyword.get(opts, field, false), caller) do
-      {:ok, value} -> value
+      {:ok, true} -> true
       _ -> false
     end
   end
