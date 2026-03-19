@@ -277,14 +277,6 @@ defmodule GraphqlQuery do
     """
   end
 
-  defp global_ignore?(caller) do
-    get_module_attribute(caller.module, :__graphql_query__ignore, false)
-  end
-
-  defp global_runtime?(caller) do
-    get_module_attribute(caller.module, :__graphql_query__runtime, false)
-  end
-
   defp add_extra_opts_to_ast(ast, extra_opts) do
     case ast do
       {:sigil_GQL, meta, [query, opts]} ->
@@ -1289,11 +1281,11 @@ defmodule GraphqlQuery do
 
       {:error, error, field} ->
         cond do
-          global_ignore?(caller) ->
+          static_ignore?(opts, caller) or global_ignore?(caller) ->
             opts = merge_extra_opts(opts, {:runtime, [ignore: true]})
             {:ignore, opts}
 
-          global_runtime?(caller) ->
+          static_runtime?(opts, caller) or global_runtime?(caller) ->
             opts = merge_extra_opts(opts, {:runtime, []})
 
             {:runtime, opts}
@@ -1383,6 +1375,31 @@ defmodule GraphqlQuery do
   defp validate_option_value(:fragments, frags, _caller) do
     {:error, :invalid_fragments, [{:error, :not_a_list, frags}]}
   end
+
+  defp global_ignore?(caller) do
+    get_module_attribute(caller.module, :__graphql_query__ignore, false)
+  end
+
+  defp global_runtime?(caller) do
+    get_module_attribute(caller.module, :__graphql_query__runtime, false)
+  end
+
+  defp static_ignore?(opts, caller) do
+    static_enabled?(opts, :ignore, caller)
+  end
+
+  defp static_runtime?(opts, caller) do
+    static_enabled?(opts, :runtime, caller)
+  end
+
+  defp static_enabled?(opts, field, caller) when is_list(opts) do
+    case validate_option_value(field, Keyword.get(opts, field, false), caller) do
+      {:ok, value} -> value
+      _ -> false
+    end
+  end
+
+  defp static_enabled?(_opts, _field, _caller), do: false
 
   defp get_module_attribute(module, key) do
     if Module.has_attribute?(module, key) do

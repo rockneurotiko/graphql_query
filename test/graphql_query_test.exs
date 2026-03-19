@@ -297,6 +297,37 @@ defmodule GraphqlQueryTest do
       assert logs =~ "unused variable"
     end
 
+    test "static runtime don't warn on compile time even if other opts can't be resolved" do
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          query_ast =
+            quote do
+              defmodule TestGqlRuntimeWithUnresolvableOpts do
+                import GraphqlQuery
+
+                def test(ignore) do
+                  gql [ignore: ignore, runtime: true], """
+                  query GetUser {
+                    user {
+                      id
+                    }
+                  }
+                  """
+                end
+              end
+
+              TestGqlRuntimeWithUnresolvableOpts.test(false)
+            end
+
+          {query, _} = Code.eval_quoted(query_ast)
+
+          assert %Document{} = query
+        end)
+
+      # Should have warnings because ignore: false overrides ignore: true
+      assert logs == ""
+    end
+
     test "adds options to gql macro with dynamic content" do
       defmodule TestGqlEvaluate2 do
         import GraphqlQuery
