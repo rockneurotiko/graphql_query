@@ -305,11 +305,9 @@ defmodule GraphqlQuery.Schema.RemoteSchemaIntegrationTest do
       assert %Document{type: :schema} = TestRemoteMfaUrl.schema()
     end
 
-    test "raises when remote :url is a tuple with non-atom elements" do
-      # A string literal like "not_atom" passes our loose compile-time shape
-      # check (it's a 2-tuple with an atom function name), but resolve_url/1
-      # raises an ArgumentError at runtime because String.upcase/0 doesn't exist.
-      # We verify the runtime behaviour here instead of a CompileError.
+    test "raises UndefinedFunctionError when {Module, :fun} references a missing function" do
+      # resolve_url/1 calls apply(String, :nonexistent_fun_arity_zero, []),
+      # which raises UndefinedFunctionError because that function doesn't exist.
       assert_raise UndefinedFunctionError, fn ->
         Remote.resolve_url({String, :nonexistent_fun_arity_zero})
       end

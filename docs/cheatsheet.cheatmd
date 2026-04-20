@@ -116,6 +116,12 @@ end
 
 ### Load schema from a remote URL
 
+Remote schemas require adding `Req` to your application dependencies:
+
+```elixir
+{:req, "~> 0.5"}
+```
+
 ```elixir
 defmodule MyApp.ExternalApi.Schema do
   use GraphqlQuery.Schema,

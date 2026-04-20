@@ -409,7 +409,7 @@ defmodule GraphqlQuery.Schema.Remote.Introspection do
   # Deprecation
   defp render_deprecated(%{"isDeprecated" => true, "deprecationReason" => reason})
        when is_binary(reason) and reason != "" do
-    escaped = String.replace(reason, "\"", "\\\"")
+    escaped = reason |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
     " @deprecated(reason: \"#{escaped}\")"
   end
 
@@ -429,6 +429,8 @@ defmodule GraphqlQuery.Schema.Remote.Introspection do
   defp description_block("", _prefix), do: ""
 
   defp description_block(desc, prefix) do
+    desc = String.replace(desc, ~s("""), ~s(\\"""))
+
     if String.contains?(desc, "\n") or String.starts_with?(desc, "\"") or
          String.ends_with?(desc, "\"") or String.contains?(desc, ~s(""")) do
       "#{prefix}\"\"\"\n#{prefix}#{desc}\n#{prefix}\"\"\"\n"

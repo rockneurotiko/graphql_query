@@ -48,9 +48,6 @@ if Code.ensure_loaded?(Req) do
         {:ok, %Req.Response{status: status}} ->
           {:error, "HTTP #{status} when fetching #{url}"}
 
-        {:error, %Mint.TransportError{reason: reason}} ->
-          {:error, "Failed to fetch #{url}: #{inspect(reason)}"}
-
         {:error, reason} ->
           {:error, "Failed to fetch #{url}: #{inspect(reason)}"}
       end
@@ -95,9 +92,6 @@ if Code.ensure_loaded?(Req) do
 
         {:ok, %Req.Response{status: status}} ->
           {:error, "HTTP #{status} when introspecting #{url}"}
-
-        {:error, %Mint.TransportError{reason: reason}} ->
-          {:error, "Failed to introspect #{url}: #{inspect(reason)}"}
 
         {:error, reason} ->
           {:error, "Failed to introspect #{url}: #{inspect(reason)}"}

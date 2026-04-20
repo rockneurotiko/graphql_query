@@ -601,6 +601,12 @@ end
 
 For external GraphQL APIs, you can configure a remote URL. The schema file is automatically derived from the module name and stored locally. Use Mix tasks to fetch and check schemas.
 
+Remote schemas require adding `Req` to your application dependencies:
+
+```elixir
+{:req, "~> 0.5"}
+```
+
 ```elixir
 defmodule MyApp.ExternalApi.Schema do
   use GraphqlQuery.Schema,
@@ -846,10 +852,8 @@ Check the documentation of these modules if you want to know more about the manu
 ### Planned
 
 - [ ] When validation error, try to detect if it's in a fragment, and if it's an "imported" fragment, print the error in the fragment's location
-- [x] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
 - [ ] Optional compile-time validation via Mix task
 - [ ] Fix line reporting on validation errors on gql on expanded code
-
 
 ### Done
 
@@ -863,6 +867,7 @@ Check the documentation of these modules if you want to know more about the manu
 - [x] Extract document info, and calculate if possible name and signature
 - [x] Improve non-compile time options detection and fallback to runtime/ignore
 - [x] GraphqlQuery.Schema with Absinthe schema
+- [x] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
 
 ---
 

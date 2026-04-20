@@ -30,7 +30,6 @@ defmodule Mix.Tasks.GraphqlQuery.Schema.Check do
   use Mix.Task
 
   alias GraphqlQuery.Schema.Remote
-  alias GraphqlQuery.Schema.Remote.HttpClient
 
   @impl Mix.Task
   def run(args) do
@@ -83,8 +82,7 @@ defmodule Mix.Tasks.GraphqlQuery.Schema.Check do
   end
 
   defp check_schema(info) do
-    %{module: module, remote: remote, schema_path: schema_path} = info
-    url = Keyword.fetch!(remote, :url)
+    %{module: module, schema_path: schema_path} = info
 
     Mix.shell().info("Checking #{inspect(module)}...")
 
@@ -93,19 +91,13 @@ defmodule Mix.Tasks.GraphqlQuery.Schema.Check do
       throw(:missing)
     end
 
-    result =
-      case Keyword.get(remote, :mode, :fetch) do
-        :fetch -> HttpClient.fetch(url, module)
-        :introspect -> HttpClient.introspect(url, module)
-      end
-
-    case result do
+    case Remote.fetch_schema(info) do
       {:ok, remote_content} ->
         if Remote.schemas_match?(schema_path, remote_content) do
           Mix.shell().info("  ✓ Up to date")
           :match
         else
-          Mix.shell().error("  ✗ Schema differs from remote (#{url})")
+          Mix.shell().error("  ✗ Schema differs from remote")
           :mismatch
         end
 

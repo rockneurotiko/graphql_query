@@ -78,7 +78,7 @@ defmodule Mix.Tasks.GraphqlQuery.Schema.Fetch do
       Mix.shell().info("")
 
       if failures > 0 do
-        Mix.shell().error("Completed: #{successes} succeeded, #{failures} failed.")
+        Mix.raise("Schema fetch failed: #{successes} succeeded, #{failures} failed.")
       else
         Mix.shell().info("All #{successes} schema(s) fetched successfully.")
       end
