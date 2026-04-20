@@ -10,7 +10,7 @@
 
 GraphQL Query provides a library for **validating, parsing, and formatting GraphQL queries and schemas**
 
-⚠️ **Disclaimer:** This library is still in early development. APIs may change as it evolves.
+⚠️ **Disclaimer:** This library is still in early development, but used in production.
 
 ---
 
@@ -33,6 +33,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 - [Schema Support](#schema-support)
   - [Parsing and Validating Schemas](#parsing-and-validating-schemas)
   - [Schema Modules](#schema-modules)
+  - [Remote Schemas](#remote-schemas)
   - [Document Validation Against Schema](#document-validation-against-schema)
 - [Apollo Federation Support](#apollo-federation-support)
 - [Formatter Integration](#formatter-integration)
@@ -68,6 +69,7 @@ GraphQL Query provides a library for **validating, parsing, and formatting Graph
 - ✅ **Schema modules** with automatic recompilation on schema changes
 - ✅ **Absinthe schema integration** for validating queries against existing Absinthe schemas
 - ✅ **Apollo Federation v2 support** for validating federated schemas with `@key`, `@shareable`, etc.
+- ✅ **Remote schema support** — fetch schemas from URLs or via introspection, with Mix tasks for CI drift detection
 - ✅ **Flexible validation modes**: compile-time, runtime, or ignore
 - ✅ **JSON encoding support** for Document structs (JSON/Jason protocols)
 - ⚡ Backed by Rust for fast parsing and validation
@@ -595,6 +597,82 @@ defmodule MyApp.Schema do
 end
 ```
 
+#### Remote Schemas
+
+For external GraphQL APIs, you can configure a remote URL. The schema file is automatically derived from the module name and stored locally. Use Mix tasks to fetch and check schemas.
+
+```elixir
+defmodule MyApp.ExternalApi.Schema do
+  use GraphqlQuery.Schema,
+    remote: [url: "https://api.example.com/schema.graphql"]
+end
+# Schema file: priv/graphql/schemas/my_app/external_api/schema.graphql
+```
+
+The `:remote` option accepts a keyword list with at least a `:url` key. The URL can be a string or a `{Module, :function}` tuple for dynamic resolution at runtime (e.g., `{MyApp.Config, :api_url}`).
+
+##### Fetch Modes
+
+By default, the schema is fetched directly from the URL (`:fetch` mode). For APIs that only support GraphQL introspection, use `:introspect` mode:
+
+```elixir
+# Default: fetch SDL directly from URL
+defmodule MyApp.ExternalApi.Schema do
+  use GraphqlQuery.Schema,
+    remote: [url: "https://api.example.com/schema.graphql"]
+end
+
+# Introspection: POST the standard introspection query and convert to SDL
+defmodule MyApp.IntrospectedApi.Schema do
+  use GraphqlQuery.Schema,
+    remote: [url: "https://api.example.com/graphql", mode: :introspect]
+end
+```
+
+In `:introspect` mode, the mix tasks send a POST request with the standard introspection query, then automatically convert the JSON response to GraphQL SDL before saving.
+
+##### Request Customization (`build_request/1`)
+
+Each remote schema module gets an overridable `build_request/1` function. Override it to add authentication, custom headers, or any other request modifications. It receives a `%Req.Request{}` and must return a `%Req.Request{}`.
+
+```elixir
+defmodule MyApp.ExternalApi.Schema do
+  use GraphqlQuery.Schema,
+    remote: [url: "https://api.example.com/schema.graphql"]
+
+  def build_request(req) do
+    req
+    |> Req.merge(auth: {:bearer, System.get_env("API_TOKEN")})
+    |> Req.Request.put_header("x-custom-header", "custom-value")
+  end
+end
+```
+
+**Schemas directory configuration** (in order of precedence):
+
+1. Per-module option: `use GraphqlQuery.Schema, remote: [...], schemas_dir: "custom/path"`
+2. Application config: `config :graphql_query, schemas_dir: "priv/graphql/schemas"`
+3. Default: `"priv/graphql/schemas"`
+
+**Fetching schemas:**
+
+```bash
+# Fetch all remote schemas
+mix graphql_query.schema.fetch
+
+# Fetch a specific schema
+mix graphql_query.schema.fetch MyApp.ExternalApi.Schema
+```
+
+**Checking for schema drift** (useful in CI):
+
+```bash
+# Check if local schemas match remote - exits with code 1 if outdated
+mix graphql_query.schema.check
+```
+
+If the local schema file doesn't exist when compiling and a remote is set up, a warning message is shown suggesting to run `mix graphql_query.schema.fetch`.
+
 ---
 
 ### Document Validation Against Schema
@@ -768,7 +846,7 @@ Check the documentation of these modules if you want to know more about the manu
 ### Planned
 
 - [ ] When validation error, try to detect if it's in a fragment, and if it's an "imported" fragment, print the error in the fragment's location
-- [ ] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
+- [x] Configure schemas with remote URLs to fetch, and have a mix task to check if the content differs
 - [ ] Optional compile-time validation via Mix task
 - [ ] Fix line reporting on validation errors on gql on expanded code
 

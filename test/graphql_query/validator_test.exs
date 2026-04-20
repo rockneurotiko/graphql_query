@@ -498,4 +498,31 @@ defmodule GraphqlQuery.ValidatorTest do
       assert Test.Schema.federation?() == false
     end
   end
+
+  describe "validate with unfetched remote schema" do
+    test "skips schema validation when remote schema is not fetched" do
+      # Define a mock schema module that raises RemoteNotFetchedError
+      defmodule UnfetchedRemoteSchema do
+        @behaviour GraphqlQuery.Schema
+
+        @impl true
+        def schema do
+          raise GraphqlQuery.Schema.RemoteNotFetchedError,
+            module: __MODULE__,
+            schema_path: "nonexistent/path/schema.graphql"
+        end
+
+        @impl true
+        def schema_path, do: "nonexistent/path/schema.graphql"
+      end
+
+      # A valid query should pass syntax validation even though schema is unavailable
+      query = "query GetUser { user { id name } }"
+      assert :ok = Validator.validate(query, "test.graphql", UnfetchedRemoteSchema, :query)
+
+      # A syntactically invalid query should still fail
+      bad_query = "query T() { field }"
+      assert {:error, _errors} = Validator.validate(bad_query, "test.graphql", UnfetchedRemoteSchema, :query)
+    end
+  end
 end
