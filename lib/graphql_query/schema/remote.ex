@@ -245,6 +245,230 @@ defmodule GraphqlQuery.Schema.Remote do
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # Compile-time helpers
+  #
+  # These functions are called from `GraphqlQuery.Schema.__using__/1` during
+  # compilation to generate the AST injected into modules that declare
+  # `remote: [...]`.
+  # ---------------------------------------------------------------------------
+
+  @valid_remote_keys [:url, :mode]
+  @valid_modes [:fetch, :introspect]
+
+  @doc """
+  Generates the quoted AST block for a remote schema module.
+
+  Called by `GraphqlQuery.Schema.__using__/1` when the `:remote` option is
+  present. Validates the remote configuration, resolves file paths, warns if
+  the local schema file is missing, and returns a quoted block that defines
+  `__remote_config__/0`, `__schemas_dir__/0`, `build_request/1`, `schema/0`,
+  and `schema_path/0` on the caller module.
+
+  ## Parameters
+
+    * `remote` — the keyword list passed as the `:remote` option
+    * `schemas_dir_opt` — the optional `:schemas_dir` override (or `nil`)
+    * `module` — the caller module atom (`__CALLER__.module`)
+    * `explicit_path` — an explicit `:schema_path` value (or `nil`)
+  """
+  @spec compile_ast(keyword(), String.t() | nil, module(), String.t() | nil) :: Macro.t()
+  def compile_ast(remote, schemas_dir_opt, module, explicit_path) do
+    unless Code.ensure_loaded?(Req) do
+      raise CompileError,
+        description:
+          "The :remote option requires the :req dependency. " <>
+            "Add {:req, \"~> 0.5\"} to your mix.exs deps."
+    end
+
+    validate_config!(remote)
+
+    {schema_path, schemas_dir} = resolve_schema_paths(explicit_path, schemas_dir_opt, module)
+
+    warn_if_schema_missing(schema_path, module)
+
+    schema_fn_ast = build_schema_fn_ast(schema_path)
+
+    quote do
+      @external_resource unquote(schema_path)
+
+      def __remote_config__, do: unquote(remote)
+      def __schemas_dir__, do: unquote(schemas_dir)
+
+      @doc """
+      Customizes the HTTP request before fetching the remote schema.
+
+      Override this function to add authentication, custom headers, or any
+      other request modifications. Receives a `%Req.Request{}` and must return
+      a `%Req.Request{}`.
+
+      The default implementation is a passthrough (no modifications).
+
+      ## Examples
+
+          # Authentication and custom header example
+          def build_request(req) do
+            req
+            |> Req.merge(auth: {:bearer, "token"})
+            |> Req.Request.put_header("x-api-key", "my-key")
+          end
+      """
+      @spec build_request(Req.Request.t()) :: Req.Request.t()
+      def build_request(req), do: req
+      defoverridable build_request: 1
+
+      unquote(schema_fn_ast)
+
+      @impl GraphqlQuery.Schema
+      def schema_path, do: unquote(schema_path)
+    end
+  end
+
+  @doc """
+  Resolves the schema file path and schemas directory for a remote module.
+
+  When `explicit_path` is provided, it is used directly and `schemas_dir` is
+  `nil`. Otherwise, the path is derived from the module name using
+  `derive_schema_path/2` and the resolved schemas directory.
+
+  Returns a `{schema_path, schemas_dir}` tuple.
+  """
+  @spec resolve_schema_paths(String.t() | nil, String.t() | nil, module()) ::
+          {String.t(), String.t() | nil}
+  def resolve_schema_paths(explicit_path, schemas_dir_opt, module) do
+    if explicit_path do
+      {explicit_path, nil}
+    else
+      schemas_dir = resolve_schemas_dir(schemas_dir_opt)
+      {derive_schema_path(module, schemas_dir), schemas_dir}
+    end
+  end
+
+  @doc """
+  Emits a compile-time warning when a remote schema file does not exist locally.
+
+  Called during compilation to alert developers that the schema needs to be
+  fetched with `mix graphql_query.schema.fetch`.
+  """
+  @spec warn_if_schema_missing(String.t(), module()) :: :ok
+  def warn_if_schema_missing(schema_path, module) do
+    unless File.exists?(schema_path) do
+      IO.warn("""
+      Remote schema file not found: #{schema_path}
+
+      Module #{inspect(module)} is configured with a remote schema but the local file
+      has not been downloaded yet.
+
+      Run the following command to fetch remote schemas:
+
+          mix graphql_query.schema.fetch
+
+      Or fetch only this schema:
+
+          mix graphql_query.schema.fetch #{inspect(module)}
+      """)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Builds the `schema/0` function AST for a remote schema module.
+
+  When the local schema file exists at compile time, generates a function that
+  loads it via `gql_from_file/2`. When it does not exist, generates a function
+  that raises `GraphqlQuery.Schema.RemoteNotFetchedError`.
+  """
+  @spec build_schema_fn_ast(String.t()) :: Macro.t()
+  def build_schema_fn_ast(schema_path) do
+    if File.exists?(schema_path) do
+      quote do
+        @impl GraphqlQuery.Schema
+        def schema do
+          gql_from_file(unquote(schema_path), type: :schema)
+        end
+      end
+    else
+      quote do
+        @impl GraphqlQuery.Schema
+        def schema do
+          raise GraphqlQuery.Schema.RemoteNotFetchedError,
+            module: __MODULE__,
+            schema_path: unquote(schema_path)
+        end
+      end
+    end
+  end
+
+  @doc """
+  Validates the `:remote` configuration keyword list.
+
+  Raises `CompileError` when:
+
+    * the value is not a keyword list
+    * the `:url` key is missing
+    * unknown keys are present (valid keys: `#{inspect(@valid_remote_keys)}`)
+    * the `:url` value is not a non-empty string or `{Module, :function}` tuple
+    * the `:mode` value is not one of `#{inspect(@valid_modes)}`
+  """
+  @spec validate_config!(keyword()) :: :ok
+  def validate_config!(remote) do
+    unless Keyword.keyword?(remote) do
+      raise CompileError,
+        description: "The :remote option must be a keyword list, got: #{inspect(remote)}"
+    end
+
+    unless Keyword.has_key?(remote, :url) do
+      raise CompileError,
+        description: "The :remote option must include a :url key, got: #{inspect(remote)}"
+    end
+
+    unknown_keys = Keyword.keys(remote) -- @valid_remote_keys
+
+    if unknown_keys != [] do
+      raise CompileError,
+        description:
+          "The :remote option contains unknown keys: #{inspect(unknown_keys)}. " <>
+            "Valid keys are: #{inspect(@valid_remote_keys)}"
+    end
+
+    url = Keyword.get(remote, :url)
+
+    unless valid_url?(url) do
+      raise CompileError,
+        description:
+          "The :remote :url must be a non-empty string or a {Module, :function} tuple, " <>
+            "got: #{inspect(url)}"
+    end
+
+    mode = Keyword.get(remote, :mode, :fetch)
+
+    unless mode in @valid_modes do
+      raise CompileError,
+        description:
+          "The :remote :mode must be one of #{inspect(@valid_modes)}, got: #{inspect(mode)}"
+    end
+
+    :ok
+  end
+
+  @doc """
+  Checks whether a URL value is valid for the `:remote` `:url` option.
+
+  Accepts non-empty binary strings and `{Module, :function}` tuples.
+  """
+  @spec valid_url?(term()) :: boolean()
+  def valid_url?(url) when is_binary(url) and url != "", do: true
+  # Accept {Module, :function} tuples; the first element may be an alias AST at
+  # compile time, so we only guard on the function name being an atom. Full
+  # resolution happens at runtime via resolve_url/1.
+  def valid_url?({_mod, fun}) when is_atom(fun), do: true
+  def valid_url?(_), do: false
+
+  # ---------------------------------------------------------------------------
+  # Private helpers
+  # ---------------------------------------------------------------------------
+
   # Converts a module name like MyApp.ExternalSchema to ["my_app", "external_schema"]
   defp module_to_path_parts(module) do
     module
