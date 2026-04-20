@@ -1,8 +1,8 @@
 defmodule Mix.Tasks.GraphqlQuery.Schema.CheckTest do
   use ExUnit.Case
 
-  alias Mix.Tasks.GraphqlQuery.Schema.Check
   alias GraphqlQuery.Schema.Remote
+  alias Mix.Tasks.GraphqlQuery.Schema.Check
 
   setup do
     # Use process shell for capturing output in tests

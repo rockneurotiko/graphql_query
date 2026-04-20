@@ -147,7 +147,8 @@ defmodule GraphqlQuery.Schema.RemoteTest do
         def url, do: "https://resolved.example.com/schema.graphql"
       end
 
-      assert Remote.resolve_url({UrlProvider, :url}) == "https://resolved.example.com/schema.graphql"
+      assert Remote.resolve_url({UrlProvider, :url}) ==
+               "https://resolved.example.com/schema.graphql"
     end
 
     test "raises ArgumentError when {Module, :fun} returns a non-string" do

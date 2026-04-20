@@ -102,8 +102,16 @@ defmodule GraphqlQuery.Schema do
   @schema_own_keys [:schema_path, :absinthe_schema, :remote, :schemas_dir]
 
   # Keys accepted by the underlying `use GraphqlQuery` macro (MacroOptions).
-  @graphql_query_keys [:ignore, :type, :schema, :evaluate, :runtime, :fragments, :format,
-                        :federation]
+  @graphql_query_keys [
+    :ignore,
+    :type,
+    :schema,
+    :evaluate,
+    :runtime,
+    :fragments,
+    :format,
+    :federation
+  ]
 
   @valid_schema_keys (@schema_own_keys ++ @graphql_query_keys) |> Enum.uniq()
 
@@ -158,27 +166,17 @@ defmodule GraphqlQuery.Schema do
     end
   end
 
-  defp remote_ast(remote, schemas_dir_opt, module, explicit_path) do
-    unless Code.ensure_loaded?(Req) do
-      raise CompileError,
-        description:
-          "The :remote option requires the :req dependency. " <>
-            "Add {:req, \"~> 0.5\"} to your mix.exs deps."
+  defp resolve_schema_paths(explicit_path, schemas_dir_opt, module) do
+    if explicit_path do
+      {explicit_path, nil}
+    else
+      schemas_dir = Remote.resolve_schemas_dir(schemas_dir_opt)
+      {Remote.derive_schema_path(module, schemas_dir), schemas_dir}
     end
+  end
 
-    validate_remote_config!(remote)
-
-    {schema_path, schemas_dir} =
-      if explicit_path do
-        {explicit_path, nil}
-      else
-        schemas_dir = Remote.resolve_schemas_dir(schemas_dir_opt)
-        {Remote.derive_schema_path(module, schemas_dir), schemas_dir}
-      end
-
-    file_exists? = File.exists?(schema_path)
-
-    unless file_exists? do
+  defp warn_if_schema_missing(schema_path, module) do
+    unless File.exists?(schema_path) do
       IO.warn("""
       Remote schema file not found: #{schema_path}
 
@@ -194,25 +192,43 @@ defmodule GraphqlQuery.Schema do
           mix graphql_query.schema.fetch #{inspect(module)}
       """)
     end
+  end
 
-    schema_fn_ast =
-      if file_exists? do
-        quote do
-          @impl GraphqlQuery.Schema
-          def schema do
-            gql_from_file(unquote(schema_path), type: :schema)
-          end
-        end
-      else
-        quote do
-          @impl GraphqlQuery.Schema
-          def schema do
-            raise GraphqlQuery.Schema.RemoteNotFetchedError,
-              module: __MODULE__,
-              schema_path: unquote(schema_path)
-          end
+  defp build_schema_fn_ast(schema_path) do
+    if File.exists?(schema_path) do
+      quote do
+        @impl GraphqlQuery.Schema
+        def schema do
+          gql_from_file(unquote(schema_path), type: :schema)
         end
       end
+    else
+      quote do
+        @impl GraphqlQuery.Schema
+        def schema do
+          raise GraphqlQuery.Schema.RemoteNotFetchedError,
+            module: __MODULE__,
+            schema_path: unquote(schema_path)
+        end
+      end
+    end
+  end
+
+  defp remote_ast(remote, schemas_dir_opt, module, explicit_path) do
+    unless Code.ensure_loaded?(Req) do
+      raise CompileError,
+        description:
+          "The :remote option requires the :req dependency. " <>
+            "Add {:req, \"~> 0.5\"} to your mix.exs deps."
+    end
+
+    validate_remote_config!(remote)
+
+    {schema_path, schemas_dir} = resolve_schema_paths(explicit_path, schemas_dir_opt, module)
+
+    warn_if_schema_missing(schema_path, module)
+
+    schema_fn_ast = build_schema_fn_ast(schema_path)
 
     quote do
       @external_resource unquote(schema_path)
@@ -259,7 +275,7 @@ defmodule GraphqlQuery.Schema do
     end
   end
 
-  defp validate_opts!(opts, file_path, absinthe, remote, schemas_dir_opt) do
+  defp validate_no_unknown_keys!(opts) do
     unknown_keys = Keyword.keys(opts) -- @valid_schema_keys
 
     if unknown_keys != [] do
@@ -268,7 +284,9 @@ defmodule GraphqlQuery.Schema do
           "Unknown options passed to use GraphqlQuery.Schema: #{inspect(unknown_keys)}. " <>
             "Valid options are: #{inspect(@valid_schema_keys)}"
     end
+  end
 
+  defp validate_absinthe_exclusivity!(absinthe, remote, file_path) do
     if absinthe && remote do
       raise CompileError,
         description:
@@ -282,7 +300,9 @@ defmodule GraphqlQuery.Schema do
           "The :absinthe_schema and :schema_path options are mutually exclusive. " <>
             "Use one or the other, not both."
     end
+  end
 
+  defp validate_schemas_dir!(schemas_dir_opt, remote, file_path) do
     if schemas_dir_opt && !remote do
       raise CompileError,
         description:
@@ -297,6 +317,12 @@ defmodule GraphqlQuery.Schema do
             "When :schema_path is provided, it fully specifies the file location, " <>
             "making :schemas_dir redundant. Remove :schemas_dir."
     end
+  end
+
+  defp validate_opts!(opts, file_path, absinthe, remote, schemas_dir_opt) do
+    validate_no_unknown_keys!(opts)
+    validate_absinthe_exclusivity!(absinthe, remote, file_path)
+    validate_schemas_dir!(schemas_dir_opt, remote, file_path)
   end
 
   @valid_remote_keys [:url, :mode]

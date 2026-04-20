@@ -57,7 +57,9 @@ defmodule GraphqlQuery.Schema.RemoteSchemaIntegrationTest do
 
   defmodule TestRemoteMfaUrl do
     use GraphqlQuery.Schema,
-      remote: [url: {GraphqlQuery.Schema.RemoteSchemaIntegrationTest.TestUrlProvider, :graphql_url}],
+      remote: [
+        url: {GraphqlQuery.Schema.RemoteSchemaIntegrationTest.TestUrlProvider, :graphql_url}
+      ],
       schemas_dir: "test/fixtures/remote_schemas"
   end
 
@@ -309,18 +311,20 @@ defmodule GraphqlQuery.Schema.RemoteSchemaIntegrationTest do
       # raises an ArgumentError at runtime because String.upcase/0 doesn't exist.
       # We verify the runtime behaviour here instead of a CompileError.
       assert_raise UndefinedFunctionError, fn ->
-        GraphqlQuery.Schema.Remote.resolve_url({String, :nonexistent_fun_arity_zero})
+        Remote.resolve_url({String, :nonexistent_fun_arity_zero})
       end
     end
 
     test "raises when remote :url is a 3-tuple" do
-      assert_raise CompileError, ~r/must be a non-empty string or a \{Module, :function\} tuple/, fn ->
-        Code.compile_string("""
-        defmodule TestRemoteThreeTupleUrl do
-          use GraphqlQuery.Schema, remote: [url: {Mod, :fun, :extra}]
-        end
-        """)
-      end
+      assert_raise CompileError,
+                   ~r/must be a non-empty string or a \{Module, :function\} tuple/,
+                   fn ->
+                     Code.compile_string("""
+                     defmodule TestRemoteThreeTupleUrl do
+                       use GraphqlQuery.Schema, remote: [url: {Mod, :fun, :extra}]
+                     end
+                     """)
+                   end
     end
   end
 end

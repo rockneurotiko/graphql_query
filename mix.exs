@@ -43,7 +43,6 @@ defmodule GraphqlQuery.MixProject do
       {:req, "~> 0.5", optional: true},
       {:jason, "~> 1.4", optional: true},
       {:absinthe, "~> 1.7", optional: true},
-
       {:plug, "~> 1.0", only: :test},
 
       # Development

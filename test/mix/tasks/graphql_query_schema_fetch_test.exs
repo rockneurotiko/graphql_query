@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.GraphqlQuery.Schema.FetchTest do
   use ExUnit.Case
 
+  alias GraphqlQuery.Schema.Remote
   alias Mix.Tasks.GraphqlQuery.Schema.Fetch
 
   setup do
@@ -60,8 +61,8 @@ defmodule Mix.Tasks.GraphqlQuery.Schema.FetchTest do
       }
 
       # Simulate what the fetch task does internally
-      assert {:ok, content} = GraphqlQuery.Schema.Remote.fetch_schema(info)
-      assert :ok = GraphqlQuery.Schema.Remote.save_schema(schema_path, content)
+      assert {:ok, content} = Remote.fetch_schema(info)
+      assert :ok = Remote.save_schema(schema_path, content)
 
       # Verify file was written correctly
       assert File.exists?(schema_path)
@@ -116,8 +117,8 @@ defmodule Mix.Tasks.GraphqlQuery.Schema.FetchTest do
         schemas_dir: tmp_dir
       }
 
-      assert {:ok, content} = GraphqlQuery.Schema.Remote.fetch_schema(info)
-      assert :ok = GraphqlQuery.Schema.Remote.save_schema(schema_path, content)
+      assert {:ok, content} = Remote.fetch_schema(info)
+      assert :ok = Remote.save_schema(schema_path, content)
 
       assert File.exists?(schema_path)
       saved = File.read!(schema_path)

@@ -72,7 +72,9 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
     body
     |> String.split("\n")
     |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "#") or String.starts_with?(&1, ~s("""))))
+    |> Enum.reject(
+      &(&1 == "" or String.starts_with?(&1, "#") or String.starts_with?(&1, ~s(""")))
+    )
     |> Enum.flat_map(fn line ->
       case Regex.run(~r/^(\w+)/, line) do
         [_, name] -> [name]
@@ -96,7 +98,8 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
 
   describe "both schemas are individually valid" do
     test "introspection JSON converts to a valid GraphQL schema" do
-      assert {:ok, _} = GraphqlQuery.Native.validate_schema(introspection_sdl(), "generated.graphql")
+      assert {:ok, _} =
+               GraphqlQuery.Native.validate_schema(introspection_sdl(), "generated.graphql")
     end
 
     test "the hand-downloaded .graphql file is a valid GraphQL schema" do
@@ -255,10 +258,16 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
 
     cond do
       sdl_type != expected ->
-        ["#{prefix} #{type_name}.#{field}: SDL return type #{inspect(sdl_type)}, expected #{inspect(expected)}" | errors]
+        [
+          "#{prefix} #{type_name}.#{field}: SDL return type #{inspect(sdl_type)}, expected #{inspect(expected)}"
+          | errors
+        ]
 
       schema_type != expected ->
-        ["#{prefix} #{type_name}.#{field}: schema return type #{inspect(schema_type)}, expected #{inspect(expected)}" | errors]
+        [
+          "#{prefix} #{type_name}.#{field}: schema return type #{inspect(schema_type)}, expected #{inspect(expected)}"
+          | errors
+        ]
 
       true ->
         errors
@@ -273,10 +282,16 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
 
     cond do
       sdl_args != expected ->
-        ["#{prefix} #{type_name}.#{field}: SDL args #{inspect(sdl_args)}, expected #{inspect(expected)}" | errors]
+        [
+          "#{prefix} #{type_name}.#{field}: SDL args #{inspect(sdl_args)}, expected #{inspect(expected)}"
+          | errors
+        ]
 
       schema_args != expected ->
-        ["#{prefix} #{type_name}.#{field}: schema args #{inspect(schema_args)}, expected #{inspect(expected)}" | errors]
+        [
+          "#{prefix} #{type_name}.#{field}: schema args #{inspect(schema_args)}, expected #{inspect(expected)}"
+          | errors
+        ]
 
       true ->
         errors
@@ -284,7 +299,7 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
   end
 
   defp diff_maps(sdl_map, schema_map) do
-    all_keys = Map.keys(sdl_map) ++ Map.keys(schema_map) |> Enum.uniq() |> Enum.sort()
+    all_keys = (Map.keys(sdl_map) ++ Map.keys(schema_map)) |> Enum.uniq() |> Enum.sort()
 
     all_keys
     |> Enum.flat_map(fn key ->

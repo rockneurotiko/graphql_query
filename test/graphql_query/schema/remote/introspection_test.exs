@@ -544,7 +544,8 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionTest do
       refute sdl =~ ~s("""")
 
       # The generated SDL must be valid GraphQL
-      assert {:ok, _} = GraphqlQuery.Native.validate_schema(sdl, "leading_quote_descriptions.graphql")
+      assert {:ok, _} =
+               GraphqlQuery.Native.validate_schema(sdl, "leading_quote_descriptions.graphql")
     end
 
     test "handles deprecated fields with reason" do

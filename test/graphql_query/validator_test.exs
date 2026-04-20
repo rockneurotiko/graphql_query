@@ -522,7 +522,9 @@ defmodule GraphqlQuery.ValidatorTest do
 
       # A syntactically invalid query should still fail
       bad_query = "query T() { field }"
-      assert {:error, _errors} = Validator.validate(bad_query, "test.graphql", UnfetchedRemoteSchema, :query)
+
+      assert {:error, _errors} =
+               Validator.validate(bad_query, "test.graphql", UnfetchedRemoteSchema, :query)
     end
   end
 end
