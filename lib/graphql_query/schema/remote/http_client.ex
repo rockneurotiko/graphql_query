@@ -136,16 +136,12 @@ if Code.ensure_loaded?(Req) do
     # Strips userinfo (credentials) and replaces the query string with
     # "<redacted>" so URLs are safe to include in error messages.
     defp sanitize_url(url) do
-      case URI.parse(url) do
-        %URI{} = parsed ->
-          parsed
-          |> Map.put(:userinfo, nil)
-          |> Map.put(:query, if(parsed.query, do: "<redacted>", else: nil))
-          |> URI.to_string()
+      parsed = URI.parse(url)
 
-        _ ->
-          "<unparseable url>"
-      end
+      parsed
+      |> Map.put(:userinfo, nil)
+      |> Map.put(:query, if(parsed.query, do: "<redacted>", else: nil))
+      |> URI.to_string()
     end
 
     defp apply_build_request(req, nil), do: req
