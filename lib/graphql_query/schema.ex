@@ -115,6 +115,16 @@ defmodule GraphqlQuery.Schema do
 
   @valid_schema_keys (@schema_own_keys ++ @graphql_query_keys) |> Enum.uniq()
 
+  @doc """
+  Sets up the current module as a `GraphqlQuery.Schema`-compliant schema module.
+
+  Accepts the same options documented in the `GraphqlQuery.Schema` module
+  (`@moduledoc`). Typically invoked as:
+
+      use GraphqlQuery.Schema, schema_path: "priv/graphql/my_schema.graphql"
+
+  See the module-level documentation for the full list of supported options.
+  """
   defmacro __using__(opts) do
     file_path = Keyword.get(opts, :schema_path)
     absinthe = Keyword.get(opts, :absinthe_schema)
