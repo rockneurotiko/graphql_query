@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.GraphqlQuery.Schema.CheckTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
 
   alias GraphqlQuery.Schema.Remote
   alias Mix.Tasks.GraphqlQuery.Schema.Check

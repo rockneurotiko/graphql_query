@@ -112,11 +112,6 @@ defmodule Mix.Tasks.GraphqlQuery.Schema.Check do
   defp parse_module_filter([]), do: nil
 
   defp parse_module_filter([module_string | _]) do
-    module_string =
-      if String.starts_with?(module_string, "Elixir."),
-        do: module_string,
-        else: "Elixir." <> module_string
-
-    String.to_atom(module_string)
+    Module.concat([module_string])
   end
 end
