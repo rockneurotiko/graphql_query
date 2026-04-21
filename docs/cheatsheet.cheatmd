@@ -114,6 +114,63 @@ defmodule MyAppWeb.Graphql.Schema do
 end
 ```
 
+### Load schema from a remote URL
+
+Remote schemas require adding `Req` to your application dependencies:
+
+```elixir
+{:req, "~> 0.5"}
+```
+
+```elixir
+defmodule MyApp.ExternalApi.Schema do
+  use GraphqlQuery.Schema,
+    remote: [url: "https://api.example.com/schema.graphql"]
+end
+# Schema file: priv/graphql/schemas/my_app/external_api/schema.graphql
+# Fetch with: mix graphql_query.schema.fetch
+```
+{: .wrap}
+
+### Remote schema with introspection
+
+```elixir
+defmodule MyApp.IntrospectedApi.Schema do
+  use GraphqlQuery.Schema,
+    remote: [url: "https://api.example.com/graphql", mode: :introspect]
+end
+```
+{: .wrap}
+
+### Remote schema with auth
+
+```elixir
+defmodule MyApp.AuthenticatedApi.Schema do
+  use GraphqlQuery.Schema,
+    remote: [url: "https://api.example.com/schema.graphql"]
+
+  def build_request(req) do
+    req
+    |> Req.merge(auth: {:bearer, System.get_env("API_TOKEN")})
+    |> Req.Request.put_header("x-custom-header", "custom-value")
+  end
+end
+```
+{: .wrap}
+
+### Mix tasks for remote schemas
+
+```bash
+# Fetch all remote schemas
+mix graphql_query.schema.fetch
+
+# Fetch a specific schema
+mix graphql_query.schema.fetch MyApp.ExternalApi.Schema
+
+# Check if local schemas match remote (CI)
+mix graphql_query.schema.check
+```
+{: .wrap}
 
 ## ~GQL Sigil
 {: .col-2}
@@ -455,7 +512,7 @@ type User @key(fields: "id") {
 # Use federation: true option
 schema = gql [type: :schema, federation: true], """
 extend schema
-  @link(url: "https://specs.apollo.dev/federation/v2.5", 
+  @link(url: "https://specs.apollo.dev/federation/v2.5",
     import: ["@key", "@authenticated"])
 
 type Product @key(fields: "id") @authenticated {
@@ -485,7 +542,7 @@ schema = gql_from_file(
 document_with_options type: :schema, federation: true do
   ~GQL"""
   extend schema
-    @link(url: "https://specs.apollo.dev/federation/v2.0", 
+    @link(url: "https://specs.apollo.dev/federation/v2.0",
       import: ["@key"])
 
   type Order @key(fields: "id") {
@@ -506,7 +563,7 @@ defmodule MyApp.FederatedSchema do
   def schema do
     ~GQL"""
     extend schema
-      @link(url: "https://specs.apollo.dev/federation/v2.0", 
+      @link(url: "https://specs.apollo.dev/federation/v2.0",
         import: ["@key", "@external"])
 
     type User @key(fields: "id") {
@@ -525,23 +582,23 @@ end
 # Federation v2.0 - Base directives
 ~GQL"""
 extend schema
-  @link(url: "https://specs.apollo.dev/federation/v2.0", 
-    import: ["@key", "@requires", "@provides", "@external", 
-             "@tag", "@extends", "@shareable", "@inaccessible", 
+  @link(url: "https://specs.apollo.dev/federation/v2.0",
+    import: ["@key", "@requires", "@provides", "@external",
+             "@tag", "@extends", "@shareable", "@inaccessible",
              "@override"])
 """sF
 
 # Federation v2.5 - Adds authentication
 ~GQL"""
 extend schema
-  @link(url: "https://specs.apollo.dev/federation/v2.5", 
+  @link(url: "https://specs.apollo.dev/federation/v2.5",
     import: ["@authenticated", "@requiresScopes"])
 """sF
 
 # Federation v2.9 - Adds cost control
 ~GQL"""
 extend schema
-  @link(url: "https://specs.apollo.dev/federation/v2.9", 
+  @link(url: "https://specs.apollo.dev/federation/v2.9",
     import: ["@cost", "@listSize"])
 """sF
 ```
@@ -553,7 +610,7 @@ extend schema
 # Rename directives with "as:"
 ~GQL"""
 extend schema
-  @link(url: "https://specs.apollo.dev/federation/v2.0", 
+  @link(url: "https://specs.apollo.dev/federation/v2.0",
     import: [{name: "@key", as: "@primaryKey"}])
 
 type Product @primaryKey(fields: "id") {
@@ -570,7 +627,7 @@ type Product @primaryKey(fields: "id") {
 # Use custom namespace prefix
 ~GQL"""
 extend schema
-  @link(url: "https://specs.apollo.dev/federation/v2.0", 
+  @link(url: "https://specs.apollo.dev/federation/v2.0",
     import: ["@key"], as: "fed")
 
 type User @key(fields: "id") {

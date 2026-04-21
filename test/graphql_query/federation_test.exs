@@ -506,6 +506,43 @@ defmodule GraphqlQuery.FederationTest do
     end
   end
 
+  describe "federation - use GraphqlQuery.Schema" do
+    @federation_file "test/fixtures/federation_schema.graphql"
+
+    test "schema_path with federation: true produces no warnings" do
+      logs =
+        capture_io(:stderr, fn ->
+          Code.eval_quoted(
+            quote do
+              defmodule TestSchemaPathFederation do
+                use GraphqlQuery.Schema,
+                  schema_path: unquote(@federation_file),
+                  federation: true
+              end
+            end
+          )
+        end)
+
+      assert logs == ""
+    end
+
+    test "schema_path without federation: true warns on federation directives" do
+      logs =
+        capture_io(:stderr, fn ->
+          Code.eval_quoted(
+            quote do
+              defmodule TestSchemaPathNoFederation do
+                use GraphqlQuery.Schema,
+                  schema_path: unquote(@federation_file)
+              end
+            end
+          )
+        end)
+
+      assert logs =~ "cannot find directive"
+    end
+  end
+
   describe "federation - @link spec itself" do
     test "validates @link directive definition" do
       schema = ~GQL"""

@@ -668,4 +668,72 @@ defmodule GraphqlQuery.SchemaTest do
       end
     end
   end
+
+  describe "option validation" do
+    test "raises when absinthe_schema and remote are both provided" do
+      assert_raise CompileError,
+                   ~r/absinthe_schema and :remote options are mutually exclusive/,
+                   fn ->
+                     Code.compile_string("""
+                     defmodule TestAbsintheWithRemote do
+                       use GraphqlQuery.Schema,
+                         absinthe_schema: SomeModule,
+                         remote: [url: "https://example.com/schema.graphql"]
+                     end
+                     """)
+                   end
+    end
+
+    test "raises when absinthe_schema and schema_path are both provided" do
+      assert_raise CompileError,
+                   ~r/absinthe_schema and :schema_path options are mutually exclusive/,
+                   fn ->
+                     Code.compile_string("""
+                     defmodule TestAbsintheWithSchemaPath do
+                       use GraphqlQuery.Schema,
+                         absinthe_schema: SomeModule,
+                         schema_path: "priv/schema.graphql"
+                     end
+                     """)
+                   end
+    end
+
+    test "raises when schemas_dir is provided without remote" do
+      assert_raise CompileError, ~r/schemas_dir option is only meaningful with :remote/, fn ->
+        Code.compile_string("""
+        defmodule TestSchemasDirWithoutRemote do
+          use GraphqlQuery.Schema,
+            schema_path: "priv/schema.graphql",
+            schemas_dir: "priv/graphql/schemas"
+        end
+        """)
+      end
+    end
+
+    test "raises when schemas_dir is provided alone without remote" do
+      assert_raise CompileError, ~r/schemas_dir option is only meaningful with :remote/, fn ->
+        Code.compile_string("""
+        defmodule TestSchemasDirAlone do
+          use GraphqlQuery.Schema,
+            schemas_dir: "priv/graphql/schemas"
+        end
+        """)
+      end
+    end
+
+    test "raises when schema_path, remote, and schemas_dir are all provided" do
+      assert_raise CompileError,
+                   ~r/schema_path and :schemas_dir options cannot be used together with :remote/,
+                   fn ->
+                     Code.compile_string("""
+                     defmodule TestAllThreeOptions do
+                       use GraphqlQuery.Schema,
+                         schema_path: "priv/schema.graphql",
+                         remote: [url: "https://example.com/schema.graphql"],
+                         schemas_dir: "priv/graphql/schemas"
+                     end
+                     """)
+                   end
+    end
+  end
 end

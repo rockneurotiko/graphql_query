@@ -40,8 +40,10 @@ defmodule GraphqlQuery.MixProject do
       {:rustler_precompiled, "~> 0.8"},
       {:rustler, "~> 0.36.0", optional: not (@dev? or @force_build?)},
       {:nimble_options, "~> 1.1"},
+      {:req, "~> 0.5", optional: true},
       {:jason, "~> 1.4", optional: true},
       {:absinthe, "~> 1.7", optional: true},
+      {:plug, "~> 1.0", only: :test},
 
       # Development
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -72,7 +74,11 @@ defmodule GraphqlQuery.MixProject do
         ],
         "Schema definition": [
           GraphqlQuery.Schema,
-          GraphqlQuery.Schema.Absinthe
+          GraphqlQuery.Schema.Absinthe,
+          GraphqlQuery.Schema.Remote,
+          GraphqlQuery.Schema.Remote.HttpClient,
+          GraphqlQuery.Schema.Remote.Introspection,
+          GraphqlQuery.Schema.RemoteNotFetchedError
         ],
         "GraphqlQuery Entities": [
           GraphqlQuery.Document,

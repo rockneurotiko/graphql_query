@@ -157,6 +157,8 @@ defmodule GraphqlQuery.Validator do
       federation: federation,
       ignore_errors: schema_doc.ignore? || false
     }
+  rescue
+    GraphqlQuery.Schema.RemoteNotFetchedError -> nil
   end
 
   defp clean_result({:ok, []}), do: :ok

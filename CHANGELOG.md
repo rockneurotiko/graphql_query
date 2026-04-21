@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Remote schema support: configure `use GraphqlQuery.Schema, remote: [url: "..."]` to manage schemas from external GraphQL APIs
+- Mix tasks to fetch and check remote schemas: `graphql_query.schema.fetch` and `graphql_query.schema.check`
+
+### Changed
+- `use GraphqlQuery.Schema` now validates option combinations and raises `CompileError` for invalid combos (e.g., `:absinthe_schema` + `:remote`)
+- Compile-time warning when remote schema file hasn't been fetched yet
+- `GraphqlQuery.Schema.RemoteNotFetchedError` for graceful handling of missing remote schemas
+
 ## [v0.5.1]
 ### Fixed
 - Check static values for `runtime` and `ignore` when other options are not static

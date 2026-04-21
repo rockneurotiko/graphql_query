@@ -26,3 +26,5 @@ native/*/target
 priv/**/*.so
 checksum*
 priv/plts
+/.dexter*
+/.env
