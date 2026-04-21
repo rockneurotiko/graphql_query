@@ -187,8 +187,8 @@ defmodule GraphqlQuery.Schema.Remote do
       iex> GraphqlQuery.Schema.Remote.resolve_url("https://example.com/schema.graphql")
       "https://example.com/schema.graphql"
 
-      iex> GraphqlQuery.Schema.Remote.resolve_url({Application, :get_env})
-      # calls Application.get_env() at runtime
+      iex> GraphqlQuery.Schema.Remote.resolve_url({Module, :url})
+      # calls Module.url() at runtime
 
   """
   @spec resolve_url(String.t() | {module(), atom()}) :: String.t()

@@ -141,6 +141,159 @@ defmodule GraphqlQuery.Schema.Remote.HttpClientTest do
     end
   end
 
+  describe "URL sanitization in error messages" do
+    test "strips userinfo (credentials) from fetch/2 HTTP error" do
+      Req.Test.stub(:sanitize_http_status, fn conn ->
+        Plug.Conn.send_resp(conn, 403, "Forbidden")
+      end)
+
+      defmodule SanitizeHttpStatusSchema do
+        def build_request(req),
+          do: Req.merge(req, plug: {Req.Test, :sanitize_http_status}, retry: false)
+      end
+
+      assert {:error, reason} =
+               HttpClient.fetch(
+                 "https://user:secret@example.com/schema.graphql",
+                 SanitizeHttpStatusSchema
+               )
+
+      assert reason =~ "HTTP 403"
+      refute reason =~ "secret"
+      refute reason =~ "user:secret"
+    end
+
+    test "redacts query string from fetch/2 HTTP error" do
+      Req.Test.stub(:sanitize_query_http, fn conn ->
+        Plug.Conn.send_resp(conn, 404, "Not Found")
+      end)
+
+      defmodule SanitizeQueryHttpSchema do
+        def build_request(req),
+          do: Req.merge(req, plug: {Req.Test, :sanitize_query_http}, retry: false)
+      end
+
+      assert {:error, reason} =
+               HttpClient.fetch(
+                 "https://example.com/schema.graphql?api_key=supersecret&token=abc123",
+                 SanitizeQueryHttpSchema
+               )
+
+      assert reason =~ "HTTP 404"
+      refute reason =~ "supersecret"
+      refute reason =~ "abc123"
+      assert reason =~ "<redacted>"
+    end
+
+    test "preserves scheme, host, and path in fetch/2 error" do
+      Req.Test.stub(:sanitize_preserve_path, fn conn ->
+        Plug.Conn.send_resp(conn, 500, "Error")
+      end)
+
+      defmodule SanitizePreservePathSchema do
+        def build_request(req),
+          do: Req.merge(req, plug: {Req.Test, :sanitize_preserve_path}, retry: false)
+      end
+
+      assert {:error, reason} =
+               HttpClient.fetch(
+                 "https://user:pass@example.com/schema.graphql?token=secret",
+                 SanitizePreservePathSchema
+               )
+
+      assert reason =~ "example.com"
+      assert reason =~ "/schema.graphql"
+      refute reason =~ "pass"
+      refute reason =~ "secret"
+    end
+
+    test "strips credentials from introspect/2 HTTP error" do
+      Req.Test.stub(:sanitize_introspect_creds, fn conn ->
+        Plug.Conn.send_resp(conn, 401, "Unauthorized")
+      end)
+
+      defmodule SanitizeIntrospectCredsSchema do
+        def build_request(req),
+          do: Req.merge(req, plug: {Req.Test, :sanitize_introspect_creds}, retry: false)
+      end
+
+      assert {:error, reason} =
+               HttpClient.introspect(
+                 "https://admin:hunter2@example.com/graphql",
+                 SanitizeIntrospectCredsSchema
+               )
+
+      assert reason =~ "HTTP 401"
+      refute reason =~ "hunter2"
+      refute reason =~ "admin:"
+    end
+
+    test "redacts query string from introspect/2 HTTP error" do
+      Req.Test.stub(:sanitize_introspect_query, fn conn ->
+        Plug.Conn.send_resp(conn, 403, "Forbidden")
+      end)
+
+      defmodule SanitizeIntrospectQuerySchema do
+        def build_request(req),
+          do: Req.merge(req, plug: {Req.Test, :sanitize_introspect_query}, retry: false)
+      end
+
+      assert {:error, reason} =
+               HttpClient.introspect(
+                 "https://example.com/graphql?access_token=topsecret",
+                 SanitizeIntrospectQuerySchema
+               )
+
+      assert reason =~ "HTTP 403"
+      refute reason =~ "topsecret"
+      assert reason =~ "<redacted>"
+    end
+
+    test "does not redact query string when none present" do
+      Req.Test.stub(:sanitize_no_query, fn conn ->
+        Plug.Conn.send_resp(conn, 404, "Not Found")
+      end)
+
+      defmodule SanitizeNoQuerySchema do
+        def build_request(req),
+          do: Req.merge(req, plug: {Req.Test, :sanitize_no_query}, retry: false)
+      end
+
+      assert {:error, reason} =
+               HttpClient.fetch("https://example.com/schema.graphql", SanitizeNoQuerySchema)
+
+      assert reason =~ "example.com/schema.graphql"
+      refute reason =~ "<redacted>"
+    end
+
+    test "strips credentials from fetch/2 network-error path" do
+      # Force a connection error so the {:error, reason} branch fires
+      assert {:error, reason} =
+               HttpClient.fetch(
+                 "http://user:secret@nonexistent.invalid.test/schema?api_key=abc",
+                 NoRetry
+               )
+
+      refute reason =~ "secret"
+      refute reason =~ "abc"
+      assert reason =~ "<redacted>"
+      assert reason =~ "nonexistent.invalid.test"
+    end
+
+    test "strips credentials from introspect/2 network-error path" do
+      assert {:error, reason} =
+               HttpClient.introspect(
+                 "http://user:secret@nonexistent.invalid.test/graphql?token=xyz",
+                 NoRetry
+               )
+
+      refute reason =~ "secret"
+      refute reason =~ "xyz"
+      assert reason =~ "<redacted>"
+      assert reason =~ "nonexistent.invalid.test"
+    end
+  end
+
   describe "introspect/2 with Req.Test stubs" do
     test "returns {:ok, sdl} on successful introspection" do
       Req.Test.stub(:introspect_success, fn conn ->

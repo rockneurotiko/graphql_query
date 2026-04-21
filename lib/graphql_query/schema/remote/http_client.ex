@@ -41,19 +41,21 @@ if Code.ensure_loaded?(Req) do
         Req.new(url: url, method: :get)
         |> apply_build_request(schema_module)
 
+      sanitized = sanitize_url(url)
+
       case Req.request(req) do
         {:ok, %Req.Response{status: status, body: body}} when status >= 200 and status < 300 ->
           {:ok, body}
 
         {:ok, %Req.Response{status: status}} ->
-          {:error, "HTTP #{status} when fetching #{url}"}
+          {:error, "HTTP #{status} when fetching #{sanitized}"}
 
         {:error, reason} ->
-          {:error, "Failed to fetch #{url}: #{inspect(reason)}"}
+          {:error, "Failed to fetch #{sanitized}: #{inspect(reason)}"}
       end
     rescue
       e ->
-        {:error, "Failed to fetch #{url}: #{Exception.message(e)}"}
+        {:error, "Failed to fetch #{sanitize_url(url)}: #{Exception.message(e)}"}
     end
 
     @doc """
@@ -86,19 +88,21 @@ if Code.ensure_loaded?(Req) do
         )
         |> apply_build_request(schema_module)
 
+      sanitized = sanitize_url(url)
+
       case Req.request(req) do
         {:ok, %Req.Response{status: status, body: body}} when status >= 200 and status < 300 ->
           convert_introspection_response(body)
 
         {:ok, %Req.Response{status: status}} ->
-          {:error, "HTTP #{status} when introspecting #{url}"}
+          {:error, "HTTP #{status} when introspecting #{sanitized}"}
 
         {:error, reason} ->
-          {:error, "Failed to introspect #{url}: #{inspect(reason)}"}
+          {:error, "Failed to introspect #{sanitized}: #{inspect(reason)}"}
       end
     rescue
       e ->
-        {:error, "Failed to introspect #{url}: #{Exception.message(e)}"}
+        {:error, "Failed to introspect #{sanitize_url(url)}: #{Exception.message(e)}"}
     end
 
     defp convert_introspection_response(body) when is_map(body) do
@@ -127,6 +131,21 @@ if Code.ensure_loaded?(Req) do
 
     defp convert_introspection_response(_body) do
       {:error, "Unexpected introspection response format"}
+    end
+
+    # Strips userinfo (credentials) and replaces the query string with
+    # "<redacted>" so URLs are safe to include in error messages.
+    defp sanitize_url(url) do
+      case URI.parse(url) do
+        %URI{} = parsed ->
+          parsed
+          |> Map.put(:userinfo, nil)
+          |> Map.put(:query, if(parsed.query, do: "<redacted>", else: nil))
+          |> URI.to_string()
+
+        _ ->
+          "<unparseable url>"
+      end
     end
 
     defp apply_build_request(req, nil), do: req
