@@ -27,23 +27,31 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
 
   # ── SDL parsing helpers ──
 
+  # Strip block-string descriptions so their contents aren't parsed as
+  # type/field declarations by the regex helpers below.
+  defp strip_block_strings(sdl) do
+    Regex.replace(~r/"""[\s\S]*?"""/m, sdl, "")
+  end
+
   defp extract_type_names(sdl, prefix) do
-    ~r/^#{prefix}\s+(\w+)/m
-    |> Regex.scan(sdl)
+    sdl
+    |> strip_block_strings()
+    |> then(&Regex.scan(~r/^#{prefix}\s+(\w+)/m, &1))
     |> Enum.map(fn [_, name] -> name end)
     |> Enum.sort()
   end
 
   defp extract_type_body(sdl, type_prefix, type_name) do
+    sdl = strip_block_strings(sdl)
     pattern = ~r/^#{type_prefix}\s+#{Regex.escape(type_name)}\b/m
 
     case Regex.run(pattern, sdl, return: :index) do
       [{start_pos, _}] ->
-        rest = String.slice(sdl, start_pos..-1//1)
+        rest = binary_part(sdl, start_pos, byte_size(sdl) - start_pos)
 
         case :binary.match(rest, "{") do
           {open_pos, 1} ->
-            after_open = String.slice(rest, (open_pos + 1)..-1//1)
+            after_open = binary_part(rest, open_pos + 1, byte_size(rest) - open_pos - 1)
             {:ok, find_matching_close(after_open, 1, <<>>)}
 
           :nomatch ->
@@ -70,11 +78,10 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
 
   defp body_field_names({:ok, body}) do
     body
+    |> strip_block_strings()
     |> String.split("\n")
     |> Enum.map(&String.trim/1)
-    |> Enum.reject(
-      &(&1 == "" or String.starts_with?(&1, "#") or String.starts_with?(&1, ~s(""")))
-    )
+    |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "#")))
     |> Enum.flat_map(fn line ->
       case Regex.run(~r/^(\w+)/, line) do
         [_, name] -> [name]
@@ -217,6 +224,7 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
     case extract_type_body(sdl, type_prefix, type_name) do
       {:ok, body} ->
         body
+        |> strip_block_strings()
         |> String.split("\n")
         |> Enum.map(&String.trim/1)
         |> Enum.find(fn line ->
@@ -273,8 +281,6 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionSchemaEquivalenceTest do
         errors
     end
   end
-
-  defp check_args(errors, _sdl_line, _schema_line, nil, _prefix, _type_name, _field), do: errors
 
   defp check_args(errors, sdl_line, schema_line, expected, prefix, type_name, field) do
     sdl_args = field_args(sdl_line)

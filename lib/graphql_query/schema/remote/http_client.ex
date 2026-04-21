@@ -104,7 +104,12 @@ if Code.ensure_loaded?(Req) do
     defp convert_introspection_response(body) when is_map(body) do
       case body do
         %{"errors" => errors} when is_list(errors) and errors != [] ->
-          messages = Enum.map_join(errors, "; ", fn e -> e["message"] || inspect(e) end)
+          messages =
+            Enum.map_join(errors, "; ", fn
+              e when is_map(e) -> e["message"] || inspect(e)
+              e -> inspect(e)
+            end)
+
           {:error, "Introspection query returned errors: #{messages}"}
 
         _ ->

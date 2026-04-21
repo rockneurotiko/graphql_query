@@ -217,8 +217,9 @@ defmodule GraphqlQuery.Schema.Remote do
   """
   @spec save_schema(String.t(), String.t()) :: :ok | {:error, term()}
   def save_schema(path, content) when is_binary(path) and is_binary(content) do
-    path |> Path.dirname() |> File.mkdir_p!()
-    File.write(path, content)
+    with :ok <- path |> Path.dirname() |> File.mkdir_p() do
+      File.write(path, content)
+    end
   end
 
   @doc """
