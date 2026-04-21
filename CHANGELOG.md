@@ -3,6 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v0.6.0]
 ### Added
 - Remote schema support: configure `use GraphqlQuery.Schema, remote: [url: "..."]` to manage schemas from external GraphQL APIs
 - Mix tasks to fetch and check remote schemas: `graphql_query.schema.fetch` and `graphql_query.schema.check`
