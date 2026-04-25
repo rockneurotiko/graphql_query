@@ -1159,7 +1159,9 @@ defmodule GraphqlQuery do
   end
 
   defp print_warnings(errors, warn_location, prefix, document) do
-    line_map = if document, do: Parser.build_line_map(document), else: %{segments: [], spreads: %{}}
+    line_map =
+      if document, do: Parser.build_line_map(document), else: %{segments: [], spreads: %{}}
+
     query_text = extract_query_text(document)
 
     Enum.each(errors, fn error ->
@@ -1173,7 +1175,9 @@ defmodule GraphqlQuery do
   end
 
   defp print_typed_warnings(warnings, warn_location, document) do
-    line_map = if document, do: Parser.build_line_map(document), else: %{segments: [], spreads: %{}}
+    line_map =
+      if document, do: Parser.build_line_map(document), else: %{segments: [], spreads: %{}}
+
     query_text = extract_query_text(document)
 
     Enum.each(warnings, fn warning ->

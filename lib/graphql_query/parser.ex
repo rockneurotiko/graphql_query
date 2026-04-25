@@ -215,7 +215,8 @@ defmodule GraphqlQuery.Parser do
       when is_binary(query_text) do
     case Regex.run(@found_variable_pattern, message) do
       [_, expected_type] ->
-        with var_name when is_binary(var_name) <- extract_variable_at(query_text, loc.line, loc.column),
+        with var_name when is_binary(var_name) <-
+               extract_variable_at(query_text, loc.line, loc.column),
              var_type when is_binary(var_type) <- find_variable_type(query_text, var_name) do
           enriched =
             "expected value of type #{expected_type}, found variable `$#{var_name}` of type `#{var_type}`"

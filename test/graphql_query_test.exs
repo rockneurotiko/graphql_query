@@ -2728,7 +2728,8 @@ defmodule GraphqlQueryTest do
         |> length()
 
       # split produces N+1 parts for N occurrences
-      assert occurrences == 2, "Expected exactly 1 occurrence of [GraphqlQuery], got #{occurrences - 1}"
+      assert occurrences == 2,
+             "Expected exactly 1 occurrence of [GraphqlQuery], got #{occurrences - 1}"
     end
 
     test "~GQL with multiple errors on different lines reports correct lines" do
@@ -2784,7 +2785,9 @@ defmodule GraphqlQueryTest do
       }
 
       enriched = Parser.enrich_error_message(error, query)
-      assert enriched.message == "expected value of type ID, found variable `$id` of type `String!`"
+
+      assert enriched.message ==
+               "expected value of type ID, found variable `$id` of type `String!`"
     end
 
     test "type mismatch in input object enriches variable info" do
@@ -2805,7 +2808,9 @@ defmodule GraphqlQueryTest do
       }
 
       enriched = Parser.enrich_error_message(error, query)
-      assert enriched.message == "expected value of type ID!, found variable `$traveller_guid` of type `String!`"
+
+      assert enriched.message ==
+               "expected value of type ID!, found variable `$traveller_guid` of type `String!`"
     end
 
     test "non-matching messages are not altered by enrichment" do
@@ -2832,7 +2837,9 @@ defmodule GraphqlQueryTest do
       }
 
       enriched = Parser.enrich_error_message(error, query)
-      assert enriched.message == "expected value of type [String!]!, found variable `$ids` of type `[ID!]!`"
+
+      assert enriched.message ==
+               "expected value of type [String!]!, found variable `$ids` of type `[ID!]!`"
     end
 
     test "enrichment handles variable with default value" do
@@ -2846,7 +2853,9 @@ defmodule GraphqlQueryTest do
       }
 
       enriched = Parser.enrich_error_message(error, query)
-      assert enriched.message == "expected value of type ID, found variable `$name` of type `String!`"
+
+      assert enriched.message ==
+               "expected value of type ID, found variable `$name` of type `String!`"
     end
   end
 
