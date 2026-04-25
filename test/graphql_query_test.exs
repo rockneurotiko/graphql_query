@@ -2771,7 +2771,7 @@ defmodule GraphqlQueryTest do
       # diagnostic, which occurs when a variable is used for an input object field.
       # Direct argument mismatches produce a different, already-rich message.
       # Test via Parser.enrich_error_message directly with the exact pattern.
-      alias GraphqlQuery.{Parser, ValidationError, Location}
+      alias GraphqlQuery.{Location, Parser, ValidationError}
 
       query = """
       query Test($id: String!) {
@@ -2792,7 +2792,7 @@ defmodule GraphqlQueryTest do
 
     test "type mismatch in input object enriches variable info" do
       # Direct test of the Parser.enrich_error_message function
-      alias GraphqlQuery.{Parser, ValidationError, Location}
+      alias GraphqlQuery.{Location, Parser, ValidationError}
 
       query = """
       query EvalTrip($traveller_guid: String!, $guest: Boolean) {
@@ -2814,7 +2814,7 @@ defmodule GraphqlQueryTest do
     end
 
     test "non-matching messages are not altered by enrichment" do
-      alias GraphqlQuery.{Parser, ValidationError, Location}
+      alias GraphqlQuery.{Location, Parser, ValidationError}
 
       query = "query Test($id: ID!) { user(id: $id) { id } }"
 
@@ -2827,7 +2827,7 @@ defmodule GraphqlQueryTest do
     end
 
     test "enrichment handles list and nullable types" do
-      alias GraphqlQuery.{Parser, ValidationError, Location}
+      alias GraphqlQuery.{Location, Parser, ValidationError}
 
       query = "query Test($ids: [ID!]!) { users(ids: $ids) { id } }"
 
@@ -2843,7 +2843,7 @@ defmodule GraphqlQueryTest do
     end
 
     test "enrichment handles variable with default value" do
-      alias GraphqlQuery.{Parser, ValidationError, Location}
+      alias GraphqlQuery.{Location, Parser, ValidationError}
 
       query = ~s|query Test($name: String! = "default") { user(name: $name) { id } }|
 

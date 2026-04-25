@@ -167,18 +167,19 @@ defmodule GraphqlQuery.Parser do
     query_text
     |> String.split("\n")
     |> Enum.with_index(1)
-    |> Enum.reduce(%{}, fn {line, line_num}, acc ->
-      case Regex.scan(~r/\.\.\.\s*(\w+)/, line) do
-        [] ->
-          acc
+    |> Enum.reduce(%{}, &collect_spread_names/2)
+  end
 
-        matches ->
-          Enum.reduce(matches, acc, fn [_, name], inner_acc ->
-            # Only keep the first occurrence of each spread
-            Map.put_new(inner_acc, name, line_num)
-          end)
-      end
-    end)
+  defp collect_spread_names({line, line_num}, acc) do
+    case Regex.scan(~r/\.\.\.\s*(\w+)/, line) do
+      [] ->
+        acc
+
+      matches ->
+        Enum.reduce(matches, acc, fn [_, name], inner_acc ->
+          Map.put_new(inner_acc, name, line_num)
+        end)
+    end
   end
 
   defp used_fragments_for(%GraphqlQuery.Document{fragments: fragments} = document) do
