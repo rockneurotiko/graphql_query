@@ -16,7 +16,7 @@ Used for GraphQL query parsing, validation, and formatting in the Rust NIF
 
 ### MIT License
 
-```
+```text
 Copyright 2021 Apollo Graph, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

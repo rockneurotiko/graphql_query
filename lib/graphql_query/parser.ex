@@ -112,15 +112,17 @@ defmodule GraphqlQuery.Parser do
     # Build segments: query occupies lines 1..query_lines
     initial = [{:query, 1, query_lines}]
 
-    {segments, _} =
-      Enum.reduce(used_fragments, {initial, query_lines}, fn fragment, {acc, offset} ->
+    {segments_rev, _} =
+      Enum.reduce(used_fragments, {[], query_lines}, fn fragment, {acc, offset} ->
         frag_text = Kernel.to_string(fragment)
         frag_lines = count_lines(frag_text)
         start = offset + 1
         finish = offset + frag_lines
         name = fragment.name || "unnamed"
-        {acc ++ [{{:fragment, name}, start, finish}], finish}
+        {[{{:fragment, name}, start, finish} | acc], finish}
       end)
+
+    segments = initial ++ Enum.reverse(segments_rev)
 
     # Build spread locations: find `...FragmentName` in the query text
     spreads = find_spread_lines(query_text)
@@ -171,7 +173,7 @@ defmodule GraphqlQuery.Parser do
   end
 
   defp collect_spread_names({line, line_num}, acc) do
-    case Regex.scan(~r/\.\.\.\s*(\w+)/, line) do
+    case Regex.scan(~r/\.\.\.\s*(?!on\b)(\w+)/, line) do
       [] ->
         acc
 
@@ -183,7 +185,7 @@ defmodule GraphqlQuery.Parser do
   end
 
   defp used_fragments_for(%GraphqlQuery.Document{fragments: fragments} = document) do
-    GraphqlQuery.Document.filter_used_fragments_public(document, fragments)
+    GraphqlQuery.Document.filter_used_fragments_for(document, fragments)
   end
 
   defp count_lines(text) do

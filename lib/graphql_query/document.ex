@@ -281,8 +281,8 @@ defmodule GraphqlQuery.Document do
   defp maybe_extract_unique_name(_), do: nil
 
   @doc false
-  @spec filter_used_fragments_public(t(), list(Fragment.t())) :: list(Fragment.t())
-  def filter_used_fragments_public(document, fragments) do
+  @spec filter_used_fragments_for(t(), list(Fragment.t())) :: list(Fragment.t())
+  def filter_used_fragments_for(document, fragments) do
     filter_used_fragments(fragments, document)
   end
 

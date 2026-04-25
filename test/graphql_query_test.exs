@@ -2795,8 +2795,8 @@ defmodule GraphqlQueryTest do
       alias GraphqlQuery.{Location, Parser, ValidationError}
 
       query = """
-      query EvalTrip($traveller_guid: String!, $guest: Boolean) {
-        eval(tripData: {travellerGuid: $traveller_guid, guest: $guest}) {
+      query EvalTrip($guid: String!, $guest: Boolean) {
+        eval(tripData: {guid: $guid, guest: $guest}) {
           compliant
         }
       }
@@ -2804,13 +2804,13 @@ defmodule GraphqlQueryTest do
 
       error = %ValidationError{
         message: "expected value of type ID!, found a variable",
-        locations: [%Location{line: 2, column: 34}]
+        locations: [%Location{line: 2, column: 25}]
       }
 
       enriched = Parser.enrich_error_message(error, query)
 
       assert enriched.message ==
-               "expected value of type ID!, found variable `$traveller_guid` of type `String!`"
+               "expected value of type ID!, found variable `$guid` of type `String!`"
     end
 
     test "non-matching messages are not altered by enrichment" do

@@ -74,11 +74,12 @@ jobs:
             plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-
 
       - name: Run dialyzer
+        id: dialyzer
         run: mix dialyzer --format github
 
       - name: Save dialyzer cache
         uses: actions/cache/save@v4
-        if: always()
+        if: always() && steps.dialyzer.outcome != 'skipped'
         with:
           path: priv/plts
           key: plts-v1-${{ matrix.otp_version }}-${{ matrix.elixir_version }}-${{ hashFiles('mix.lock') }}
