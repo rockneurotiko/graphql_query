@@ -467,7 +467,7 @@ defmodule GraphqlQuery do
     warn_location = warn_location([], caller)
     # For single-line binary strings, the content is on the same line as the call.
     # Use caller.line - 1 as base so that error line 1 maps to caller.line.
-    inline_meta = [line: caller.line - 1]
+    inline_meta = [line: max(caller.line - 1, 0)]
 
     case validate_options(opts, caller) do
       {:ok, opts} ->
@@ -1087,26 +1087,20 @@ defmodule GraphqlQuery do
             query
 
           {:ok, warnings} ->
-            line_map = GraphqlQuery.Parser.build_line_map(query)
-            query_text = GraphqlQuery.Document.format_query_with_fragments(query)
+            diagnostics =
+              GraphqlQuery.Validator.emit_validation_diagnostics(
+                warnings,
+                unquote(warn_location),
+                :runtime,
+                query,
+                fn warning ->
+                  message = GraphqlQuery.format_warning(warning)
+                  %GraphqlQuery.ValidationError{message: message, locations: warning.locations}
+                end
+              )
 
-            Enum.each(warnings, fn warning ->
-              message = GraphqlQuery.format_warning(warning)
-
-              ve = %GraphqlQuery.ValidationError{message: message, locations: warning.locations}
-              ve = GraphqlQuery.Parser.enrich_error_message(ve, query_text)
-              {ve, frag_ctx} = GraphqlQuery.maybe_adjust_for_fragment(ve, line_map)
-
-              error =
-                GraphqlQuery.Parser.format_error(
-                  ve,
-                  unquote(warn_location),
-                  :runtime
-                )
-
-              msg = GraphqlQuery.append_fragment_context(error.message, frag_ctx)
-
-              GraphqlQuery.Logger.warning(msg, error.location)
+            Enum.each(diagnostics, fn {message, location} ->
+              GraphqlQuery.Logger.warning(message, location)
             end)
 
             query
@@ -1116,16 +1110,17 @@ defmodule GraphqlQuery do
           query
 
         {:error, errors} ->
-          line_map = GraphqlQuery.Parser.build_line_map(query)
-          query_text = GraphqlQuery.Document.format_query_with_fragments(query)
+          diagnostics =
+            GraphqlQuery.Validator.emit_validation_diagnostics(
+              errors,
+              unquote(warn_location),
+              :runtime,
+              query,
+              & &1
+            )
 
-          Enum.each(errors, fn error ->
-            error = GraphqlQuery.Parser.enrich_error_message(error, query_text)
-            {error, frag_ctx} = GraphqlQuery.maybe_adjust_for_fragment(error, line_map)
-            error = GraphqlQuery.Parser.format_error(error, unquote(warn_location), :runtime)
-            msg = GraphqlQuery.append_fragment_context(error.message, frag_ctx)
-
-            GraphqlQuery.Logger.warning(msg, error.location)
+          Enum.each(diagnostics, fn {message, location} ->
+            GraphqlQuery.Logger.warning(message, location)
           end)
 
           query
@@ -1159,42 +1154,22 @@ defmodule GraphqlQuery do
   end
 
   defp print_warnings(errors, warn_location, prefix, document) do
-    line_map = Parser.build_line_map(document)
+    diagnostics = Validator.emit_validation_diagnostics(errors, warn_location, prefix, document, & &1)
 
-    query_text = extract_query_text(document)
-
-    Enum.each(errors, fn error ->
-      error = Parser.enrich_error_message(error, query_text)
-      {error, fragment_ctx} = maybe_adjust_for_fragment(error, line_map)
-      formatted = Parser.format_error(error, warn_location, prefix)
-      message = append_fragment_context(formatted.message, fragment_ctx)
-
-      GraphqlQuery.Logger.warning(message, formatted.location)
+    Enum.each(diagnostics, fn {message, location} ->
+      GraphqlQuery.Logger.warning(message, location)
     end)
   end
 
   defp print_typed_warnings(warnings, warn_location, document) do
-    line_map = Parser.build_line_map(document)
+    diagnostics =
+      Validator.emit_validation_diagnostics(warnings, warn_location, "", document, fn warning ->
+        message = format_warning(warning)
+        %ValidationError{message: message, locations: warning.locations}
+      end)
 
-    query_text = extract_query_text(document)
-
-    Enum.each(warnings, fn warning ->
-      message = GraphqlQuery.format_warning(warning)
-
-      validation_error = %ValidationError{message: message, locations: warning.locations}
-      validation_error = Parser.enrich_error_message(validation_error, query_text)
-      {validation_error, fragment_ctx} = maybe_adjust_for_fragment(validation_error, line_map)
-
-      formatted =
-        Parser.format_error(
-          validation_error,
-          warn_location,
-          ""
-        )
-
-      message = append_fragment_context(formatted.message, fragment_ctx)
-
-      GraphqlQuery.Logger.warning(message, formatted.location)
+    Enum.each(diagnostics, fn {message, location} ->
+      GraphqlQuery.Logger.warning(message, location)
     end)
   end
 
@@ -1208,11 +1183,17 @@ defmodule GraphqlQuery do
       {:fragment, name, relative_line} ->
         # Error is within an appended fragment. Point to the ...FragmentName
         # spread line in the query so the user sees where the fragment is used.
-        # If the spread isn't found, fall back to line 0 (the sigil line).
-        spread_line = Parser.find_spread_line(line_map, name) || 0
-        adjusted_loc = %{loc | line: spread_line, column: 0}
-        adjusted_error = %{error | locations: [adjusted_loc | rest]}
-        {adjusted_error, {:fragment, name, relative_line}}
+        # If the spread isn't found, preserve the original loc so the user
+        # still sees the fragment-relative line plus appended context.
+        case Parser.find_spread_line(line_map, name) do
+          nil ->
+            {error, {:fragment, name, relative_line}}
+
+          spread_line ->
+            adjusted_loc = %{loc | line: spread_line, column: 0}
+            adjusted_error = %{error | locations: [adjusted_loc | rest]}
+            {adjusted_error, {:fragment, name, relative_line}}
+        end
 
       {:query, _relative_line} ->
         {error, nil}
@@ -1230,9 +1211,10 @@ defmodule GraphqlQuery do
     message <> "\n  in fragment '#{name}' at line #{line} (included via fragments option)"
   end
 
-  defp extract_query_text(%Document{} = doc), do: Document.format_query_with_fragments(doc)
-  defp extract_query_text(%Fragment{fragment: text}), do: text
-  defp extract_query_text(_), do: nil
+  @doc false
+  def extract_query_text(%Document{} = doc), do: Document.format_query_with_fragments(doc)
+  def extract_query_text(%Fragment{fragment: text}), do: text
+  def extract_query_text(_), do: nil
 
   @doc """
   Formats a `GraphqlQuery.ValidationWarning` into a human-readable string.

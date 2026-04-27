@@ -160,7 +160,10 @@ defmodule GraphqlQuery.Parser do
   Returns the line number (1-indexed) or `nil` if the spread is not found.
   """
   def find_spread_line(%{spreads: spreads}, fragment_name) do
-    Map.get(spreads, fragment_name)
+    case Map.get(spreads, fragment_name) do
+      [first | _] -> first
+      _ -> nil
+    end
   end
 
   def find_spread_line(_, _), do: nil
@@ -170,6 +173,7 @@ defmodule GraphqlQuery.Parser do
     |> String.split("\n")
     |> Enum.with_index(1)
     |> Enum.reduce(%{}, &collect_spread_names/2)
+    |> Map.new(fn {name, lines} -> {name, Enum.sort(lines)} end)
   end
 
   defp collect_spread_names({line, line_num}, acc) do
@@ -179,7 +183,7 @@ defmodule GraphqlQuery.Parser do
 
       matches ->
         Enum.reduce(matches, acc, fn [_, name], inner_acc ->
-          Map.put_new(inner_acc, name, line_num)
+          Map.update(inner_acc, name, [line_num], fn existing -> [line_num | existing] end)
         end)
     end
   end
@@ -220,7 +224,7 @@ defmodule GraphqlQuery.Parser do
       [_, expected_type] ->
         with var_name when is_binary(var_name) <-
                extract_variable_at(query_text, loc.line, loc.column),
-             var_type when is_binary(var_type) <- find_variable_type(query_text, var_name) do
+             var_type when is_binary(var_type) <- find_variable_type(query_text, var_name, loc) do
           enriched =
             "expected value of type #{expected_type}, found variable `$#{var_name}` of type `#{var_type}`"
 
@@ -258,15 +262,31 @@ defmodule GraphqlQuery.Parser do
 
   # Finds the declared type of a variable by scanning operation definitions.
   # Looks for patterns like `$name: Type` or `$name: Type!` or `$name: [Type!]!`
-  defp find_variable_type(query_text, var_name) do
-    # Match $var_name followed by : and its type annotation.
-    # The type can include [], !, and nested combinations.
-    # We capture up to the next comma, closing paren, or equals sign (default value).
+  # When multiple operations declare the same variable, uses the error location
+  # to pick the closest preceding declaration.
+  defp find_variable_type(query_text, var_name, loc) do
     pattern = Regex.compile!("\\$" <> Regex.escape(var_name) <> "\\s*:\\s*([^,)=]+)")
+    lines = String.split(query_text, "\n")
 
-    case Regex.run(pattern, query_text) do
-      [_, type_str] -> String.trim(type_str)
-      _ -> nil
+    matches =
+      lines
+      |> Enum.with_index(1)
+      |> Enum.flat_map(fn {line_text, line_num} ->
+        case Regex.run(pattern, line_text) do
+          [_, type_str] -> [{line_num, String.trim(type_str)}]
+          _ -> []
+        end
+      end)
+
+    case matches do
+      [] -> nil
+      [{_line, type}] -> type
+      multiple ->
+        # Pick the declaration closest to but before the error line
+        case Enum.filter(multiple, fn {line_num, _} -> line_num <= loc.line end) do
+          [] -> multiple |> List.first() |> elem(1)
+          preceding -> preceding |> Enum.max_by(fn {line_num, _} -> line_num end) |> elem(1)
+        end
     end
   end
 end

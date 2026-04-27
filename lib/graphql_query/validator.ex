@@ -164,4 +164,21 @@ defmodule GraphqlQuery.Validator do
   defp clean_result({:ok, []}), do: :ok
   defp clean_result({:ok, warnings}) when is_list(warnings), do: {:ok, warnings}
   defp clean_result(other), do: other
+
+  @doc false
+  def emit_validation_diagnostics(items, warn_location, prefix, document, item_to_ve_fn) do
+    alias GraphqlQuery.Parser
+
+    line_map = Parser.build_line_map(document)
+    query_text = GraphqlQuery.extract_query_text(document)
+
+    Enum.map(items, fn item ->
+      ve = item_to_ve_fn.(item)
+      ve = Parser.enrich_error_message(ve, query_text)
+      {ve, frag_ctx} = GraphqlQuery.maybe_adjust_for_fragment(ve, line_map)
+      formatted = Parser.format_error(ve, warn_location, prefix)
+      message = GraphqlQuery.append_fragment_context(formatted.message, frag_ctx)
+      {message, formatted.location}
+    end)
+  end
 end

@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
 - Validation errors originating in external fragments (passed via the `fragments:` option) now include context identifying the fragment name and line, and point to the `...FragmentName` spread in the query rather than the sigil line.
 - Validation errors of the form `expected value of type X, found a variable` (produced by apollo-compiler when a variable is used for an input object field with an incompatible type) are now enriched with the variable name and its declared type, e.g.:
 
-  ```
+  ```text
   expected value of type ID!, found variable `$guid` of type `String!`
   ```
 - Added `THIRD_PARTY_LICENSES.md` documenting the apollo-compiler dependency (MIT/Apache-2.0).
