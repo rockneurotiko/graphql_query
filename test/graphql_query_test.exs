@@ -2467,6 +2467,398 @@ defmodule GraphqlQueryTest do
     end
   end
 
+  describe "warning line/column accuracy" do
+    test "~GQL sigil reports correct line for errors" do
+      # The unused variable is on line 6 of the source
+      code = ~S'''
+      defmodule TestSigilLine do
+        import GraphqlQuery
+
+        def test do
+          ~GQL"""
+          query GetUser($unused: String) {
+            user {
+              id
+            }
+          }
+          """
+        end
+      end
+      '''
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_sigil_line.ex")
+        end)
+
+      # Line 6 is where "query GetUser($unused: String) {" is
+      assert logs =~ "test_sigil_line.ex:6"
+    end
+
+    test "gql heredoc with module attribute reports correct line for errors" do
+      # Use Code.compile_string to have proper module attribute resolution
+      code = """
+      defmodule TestGqlHeredocLine do
+        import GraphqlQuery
+
+        @fields "id name"
+
+        def test do
+          gql \"\"\"
+          query GetUser($unused: String) {
+            user {
+              \#{@fields}
+            }
+          }
+          \"\"\"
+        end
+      end
+      """
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_gql_heredoc_line.ex")
+        end)
+
+      # Should report unused variable at the correct line
+      assert logs =~ "unused variable"
+      # Line 8 is where "query GetUser($unused: String) {" is
+      assert logs =~ "test_gql_heredoc_line.ex:8"
+    end
+
+    test "gql single-line string reports correct line for errors" do
+      code = ~S'''
+      defmodule TestGqlInlineLine do
+        import GraphqlQuery
+
+        def test do
+          gql [ignore: true], "query GetUser($unused: String) { user { id } }"
+        end
+      end
+      '''
+
+      # Should compile without warnings (ignore: true)
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_gql_inline_line.ex")
+        end)
+
+      refute logs =~ "[GraphqlQuery]"
+    end
+
+    test "gql_from_file reports correct line within external file" do
+      code = ~S'''
+      defmodule TestGqlFromFileLine do
+        import GraphqlQuery
+
+        def test do
+          gql_from_file("test/fixtures/invalid_query.graphql")
+        end
+      end
+      '''
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_gql_from_file_line.ex")
+        end)
+
+      # Error should be at line 1 of the .graphql file, not offset by caller line
+      assert logs =~ "invalid_query.graphql:1"
+      refute logs =~ "invalid_query.graphql:6"
+      refute logs =~ "invalid_query.graphql:7"
+    end
+
+    test "error after fragment spread reports correct line" do
+      code = ~S'''
+      defmodule TestAfterSpreadLine do
+        import GraphqlQuery
+
+        @user_fragment ~GQL"""
+        fragment UserFields on User {
+          name
+          email
+        }
+        """f
+
+        def test do
+          document_with_options fragments: [@user_fragment] do
+            ~GQL"""
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                ...UserFields
+                ...MissingFragment
+              }
+            }
+            """
+          end
+        end
+      end
+      '''
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_after_spread.ex")
+        end)
+
+      assert logs =~ "cannot find fragment `MissingFragment`"
+      # ...MissingFragment is on line 17
+      assert logs =~ "test_after_spread.ex:17"
+    end
+
+    test "error in external fragment includes fragment context" do
+      code = ~S'''
+      defmodule TestFragCtxLine do
+        import GraphqlQuery
+
+        @user_fragment ~GQL"""
+        fragment UserFields on User {
+          name
+          ...NestedMissing
+        }
+        """f
+
+        def test do
+          document_with_options fragments: [@user_fragment] do
+            ~GQL"""
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                ...UserFields
+              }
+            }
+            """
+          end
+        end
+      end
+      '''
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_frag_ctx.ex")
+        end)
+
+      assert logs =~ "cannot find fragment `NestedMissing`"
+      assert logs =~ "in fragment 'UserFields'"
+      assert logs =~ "included via fragments option"
+      # Should point to the ...UserFields spread line (line 16), not the ~GQL line
+      assert logs =~ "test_frag_ctx.ex:16"
+    end
+
+    test "error in external fragment with multiple fragments points to correct spread" do
+      code = ~S'''
+      defmodule TestMultiFragSpread do
+        import GraphqlQuery
+
+        @addr_fragment ~GQL"""
+        fragment AddressFields on Address {
+          street
+          ...BadNested
+        }
+        """f
+
+        @user_fragment ~GQL"""
+        fragment UserFields on User {
+          name
+          email
+        }
+        """f
+
+        def test do
+          document_with_options fragments: [@user_fragment, @addr_fragment] do
+            ~GQL"""
+            query GetUser($id: ID!) {
+              user(id: $id) {
+                ...UserFields
+                address {
+                  ...AddressFields
+                }
+              }
+            }
+            """
+          end
+        end
+      end
+      '''
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_multi_frag_spread.ex")
+        end)
+
+      assert logs =~ "cannot find fragment `BadNested`"
+      assert logs =~ "in fragment 'AddressFields'"
+      # Should point to the ...AddressFields spread line (line 25)
+      assert logs =~ "test_multi_frag_spread.ex:25"
+    end
+
+    test "runtime validation does not have double prefix" do
+      code = ~S'''
+      defmodule TestRuntimeNoDoublePrefix do
+        import GraphqlQuery
+        require Logger
+
+        def test do
+          gql [runtime: true], """
+          query GetUser($unused: String) {
+            user {
+              id
+            }
+          }
+          """
+        end
+      end
+      '''
+
+      Code.compile_string(code, "lib/test_rt_prefix.ex")
+
+      {_query, logs} =
+        ExUnit.CaptureLog.with_log(fn ->
+          {query, _} =
+            Code.eval_string("TestRuntimeNoDoublePrefix.test()")
+
+          query
+        end)
+
+      # Should contain exactly one [GraphqlQuery] prefix, not doubled
+      assert logs =~ "[GraphqlQuery]"
+
+      # Count occurrences of the prefix - should be exactly 1
+      occurrences =
+        logs
+        |> String.split("[GraphqlQuery]")
+        |> length()
+
+      # split produces N+1 parts for N occurrences
+      assert occurrences == 2,
+             "Expected exactly 1 occurrence of [GraphqlQuery], got #{occurrences - 1}"
+    end
+
+    test "~GQL with multiple errors on different lines reports correct lines" do
+      code = ~S'''
+      defmodule TestMultiErrorLines do
+        import GraphqlQuery
+
+        def test do
+          ~GQL"""
+          {
+            user {
+              id
+            }
+          }
+
+          query Q2($unused: String) {
+            posts {
+              title
+            }
+          }
+          """
+        end
+      end
+      '''
+
+      logs =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          Code.compile_string(code, "lib/test_multi_error.ex")
+        end)
+
+      # Line 6 = the anonymous operation { (line 1 of GQL + sigil at line 5)
+      assert logs =~ "test_multi_error.ex:6"
+      # Line 12 = query Q2 (line 7 of GQL + sigil at line 5)
+      assert logs =~ "test_multi_error.ex:12"
+    end
+
+    test "type mismatch enriches 'found a variable' with variable name and type" do
+      # The "found a variable" message is produced by apollo-compiler's UnsupportedValueType
+      # diagnostic, which occurs when a variable is used for an input object field.
+      # Direct argument mismatches produce a different, already-rich message.
+      # Test via Parser.enrich_error_message directly with the exact pattern.
+      alias GraphqlQuery.{Location, Parser, ValidationError}
+
+      query = """
+      query Test($id: String!) {
+        eval(data: {userId: $id}) { result }
+      }
+      """
+
+      error = %ValidationError{
+        message: "expected value of type ID, found a variable",
+        locations: [%Location{line: 2, column: 23}]
+      }
+
+      enriched = Parser.enrich_error_message(error, query)
+
+      assert enriched.message ==
+               "expected value of type ID, found variable `$id` of type `String!`"
+    end
+
+    test "type mismatch in input object enriches variable info" do
+      # Direct test of the Parser.enrich_error_message function
+      alias GraphqlQuery.{Location, Parser, ValidationError}
+
+      query = """
+      query EvalTrip($guid: String!, $guest: Boolean) {
+        eval(tripData: {guid: $guid, guest: $guest}) {
+          compliant
+        }
+      }
+      """
+
+      error = %ValidationError{
+        message: "expected value of type ID!, found a variable",
+        locations: [%Location{line: 2, column: 25}]
+      }
+
+      enriched = Parser.enrich_error_message(error, query)
+
+      assert enriched.message ==
+               "expected value of type ID!, found variable `$guid` of type `String!`"
+    end
+
+    test "non-matching messages are not altered by enrichment" do
+      alias GraphqlQuery.{Location, Parser, ValidationError}
+
+      query = "query Test($id: ID!) { user(id: $id) { id } }"
+
+      error = %ValidationError{
+        message: "unused variable: `$foo`",
+        locations: [%Location{line: 1, column: 12}]
+      }
+
+      assert Parser.enrich_error_message(error, query).message == "unused variable: `$foo`"
+    end
+
+    test "enrichment handles list and nullable types" do
+      alias GraphqlQuery.{Location, Parser, ValidationError}
+
+      query = "query Test($ids: [ID!]!) { users(ids: $ids) { id } }"
+
+      error = %ValidationError{
+        message: "expected value of type [String!]!, found a variable",
+        locations: [%Location{line: 1, column: 39}]
+      }
+
+      enriched = Parser.enrich_error_message(error, query)
+
+      assert enriched.message ==
+               "expected value of type [String!]!, found variable `$ids` of type `[ID!]!`"
+    end
+
+    test "enrichment handles variable with default value" do
+      alias GraphqlQuery.{Location, Parser, ValidationError}
+
+      query = ~s|query Test($name: String! = "default") { user(name: $name) { id } }|
+
+      error = %ValidationError{
+        message: "expected value of type ID, found a variable",
+        locations: [%Location{line: 1, column: 53}]
+      }
+
+      enriched = Parser.enrich_error_message(error, query)
+
+      assert enriched.message ==
+               "expected value of type ID, found variable `$name` of type `String!`"
+    end
+  end
+
   defp with_tmp_file(content, callback) do
     file_path = "test_#{abs(:erlang.unique_integer())}"
     File.write!(file_path, content)

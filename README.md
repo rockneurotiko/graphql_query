@@ -874,6 +874,8 @@ Check the documentation of these modules if you want to know more about the manu
 ## License
 Beerware 🍺 — do whatever you want with it, but if we meet, buy me a beer. (This is essentially MIT-like. Use it freely, but if we meet, buy me a beer)
 
+This library uses [apollo-compiler](https://github.com/apollographql/apollo-rs) for GraphQL parsing and validation, which is licensed under MIT/Apache-2.0. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for details.
+
 <!-- MDOC -->
 
 ---

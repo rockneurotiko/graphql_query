@@ -16,11 +16,10 @@ defmodule GraphqlQuery.Logger do
         end
 
       _ ->
-        # Runtime call
+        # Runtime call - message is already formatted by the caller
         quote do
           require Logger
-          error = GraphqlQuery.Parser.format_error(unquote(message), unquote(location), :runtime)
-          Logger.warning(error, unquote(location))
+          Logger.warning(unquote(message), unquote(location))
         end
     end
   end

@@ -126,7 +126,8 @@ defmodule GraphqlQuery.MixProject do
         "mix.exs",
         "README.md",
         "VERSION",
-        "LICENSE"
+        "LICENSE",
+        "THIRD_PARTY_LICENSES.md"
       ],
       licenses: ["Beerware"],
       links: %{"GitHub" => @source_url},
