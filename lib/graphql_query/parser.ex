@@ -279,14 +279,21 @@ defmodule GraphqlQuery.Parser do
       end)
 
     case matches do
-      [] -> nil
-      [{_line, type}] -> type
+      [] ->
+        nil
+
+      [{_line, type}] ->
+        type
+
       multiple ->
-        # Pick the declaration closest to but before the error line
-        case Enum.filter(multiple, fn {line_num, _} -> line_num <= loc.line end) do
-          [] -> multiple |> List.first() |> elem(1)
-          preceding -> preceding |> Enum.max_by(fn {line_num, _} -> line_num end) |> elem(1)
-        end
+        pick_closest_declaration(multiple, loc)
+    end
+  end
+
+  defp pick_closest_declaration(matches, loc) do
+    case Enum.filter(matches, fn {line_num, _} -> line_num <= loc.line end) do
+      [] -> matches |> List.first() |> elem(1)
+      preceding -> preceding |> Enum.max_by(fn {line_num, _} -> line_num end) |> elem(1)
     end
   end
 end

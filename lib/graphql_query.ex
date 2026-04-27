@@ -1154,7 +1154,8 @@ defmodule GraphqlQuery do
   end
 
   defp print_warnings(errors, warn_location, prefix, document) do
-    diagnostics = Validator.emit_validation_diagnostics(errors, warn_location, prefix, document, & &1)
+    diagnostics =
+      Validator.emit_validation_diagnostics(errors, warn_location, prefix, document, & &1)
 
     Enum.each(diagnostics, fn {message, location} ->
       GraphqlQuery.Logger.warning(message, location)
