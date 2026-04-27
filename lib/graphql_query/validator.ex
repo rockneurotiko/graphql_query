@@ -12,6 +12,7 @@ defmodule GraphqlQuery.Validator do
     DocumentInfo,
     Fragment,
     Native,
+    Parser,
     SchemaInformation,
     ValidationWarning
   }
@@ -167,8 +168,6 @@ defmodule GraphqlQuery.Validator do
 
   @doc false
   def emit_validation_diagnostics(items, warn_location, prefix, document, item_to_ve_fn) do
-    alias GraphqlQuery.Parser
-
     line_map = Parser.build_line_map(document)
     query_text = GraphqlQuery.extract_query_text(document)
 
