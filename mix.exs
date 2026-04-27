@@ -67,7 +67,12 @@ defmodule GraphqlQuery.MixProject do
       logo: "graphql_query_exdoc.png",
       source_ref: "v#{@version}",
       source_url: @source_url,
-      extras: ["docs/cheatsheet.cheatmd", "docs/macros.md", "CHANGELOG.md", "THIRD_PARTY_LICENSES.md"],
+      extras: [
+        "docs/cheatsheet.cheatmd",
+        "docs/macros.md",
+        "CHANGELOG.md",
+        "THIRD_PARTY_LICENSES.md"
+      ],
       groups_for_modules: [
         GraphqlQuery: [
           GraphqlQuery
