@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## Unreleased
+
+## [0.6.2]
+### Fixed
+- Fix escape in @deprecated reason correctly. By @fizzlebert
+
+## [0.6.1]
 ### Fixed
 - Warning line and column numbers are now accurate for all macro variants (`~GQL` sigil, `gql` heredoc, `gql` inline string, `gql_from_file`). Previously, line numbers were off by one due to a spurious `+1` in the offset calculation.
 - Single-line `gql("...")` string arguments now correctly map errors to the call site line.
