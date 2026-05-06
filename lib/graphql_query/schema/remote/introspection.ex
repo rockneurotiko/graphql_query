@@ -409,8 +409,7 @@ defmodule GraphqlQuery.Schema.Remote.Introspection do
   # Deprecation
   defp render_deprecated(%{"isDeprecated" => true, "deprecationReason" => reason})
        when is_binary(reason) and reason != "" do
-    escaped = reason |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
-    " @deprecated(reason: \"#{escaped}\")"
+    " @deprecated(reason: \"#{escape_string_value(reason)}\")"
   end
 
   defp render_deprecated(%{"isDeprecated" => true}) do
@@ -418,6 +417,28 @@ defmodule GraphqlQuery.Schema.Remote.Introspection do
   end
 
   defp render_deprecated(_), do: ""
+
+  # escape StringValue following spec at
+  # https://spec.graphql.org/September2025/#sec-String)
+  defp escape_string_value(reason) do
+    reason
+    |> String.to_charlist()
+    |> Enum.map_join(&escape_codepoint/1)
+  end
+
+  defp escape_codepoint(?\\), do: "\\\\"
+  defp escape_codepoint(?"), do: "\\\""
+  defp escape_codepoint(?\b), do: "\\b"
+  defp escape_codepoint(?\f), do: "\\f"
+  defp escape_codepoint(?\n), do: "\\n"
+  defp escape_codepoint(?\r), do: "\\r"
+  defp escape_codepoint(?\t), do: "\\t"
+
+  defp escape_codepoint(c) when c < 0x20 or (c >= 0x7F and c <= 0x9F) do
+    "\\u" <> (c |> Integer.to_string(16) |> String.pad_leading(4, "0"))
+  end
+
+  defp escape_codepoint(c), do: <<c::utf8>>
 
   # Default values — stored as JSON-encoded strings in introspection
   defp render_default_value(nil), do: ""
