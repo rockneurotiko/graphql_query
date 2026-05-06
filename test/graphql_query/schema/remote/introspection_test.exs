@@ -178,6 +178,81 @@ defmodule GraphqlQuery.Schema.Remote.IntrospectionTest do
       assert sdl =~ "directive @deprecated"
     end
 
+    test "escapes control characters in deprecation reasons so the SDL parses" do
+      schema = %{
+        "queryType" => %{"name" => "Query"},
+        "mutationType" => nil,
+        "subscriptionType" => nil,
+        "directives" => [],
+        "types" => [
+          %{
+            "kind" => "OBJECT",
+            "name" => "Query",
+            "description" => nil,
+            "interfaces" => [],
+            "fields" => [
+              %{
+                "name" => "old",
+                "description" => nil,
+                "args" => [],
+                "type" => %{"kind" => "SCALAR", "name" => "String", "ofType" => nil},
+                "isDeprecated" => true,
+                "deprecationReason" => "Use `new` instead.\nSee the docs for details.\n"
+              }
+            ],
+            "inputFields" => nil,
+            "enumValues" => nil,
+            "possibleTypes" => nil
+          }
+        ]
+      }
+
+      {:ok, sdl} = Introspection.to_sdl(schema)
+      assert sdl =~ ~S|@deprecated(reason: "Use `new` instead.\nSee the docs for details.\n")|
+      assert {:ok, _} = GraphqlQuery.Native.validate_schema(sdl, "test.graphql")
+    end
+
+    test "escapes the full set of GraphQL StringValue escapes in deprecation reasons" do
+      reason =
+        "quote:\" backslash:\\ bs:\b ff:\f lf:\n cr:\r tab:\t soh:\x01 nel:\u0085 unicode:café"
+
+      schema = %{
+        "queryType" => %{"name" => "Query"},
+        "mutationType" => nil,
+        "subscriptionType" => nil,
+        "directives" => [],
+        "types" => [
+          %{
+            "kind" => "OBJECT",
+            "name" => "Query",
+            "description" => nil,
+            "interfaces" => [],
+            "fields" => [
+              %{
+                "name" => "old",
+                "description" => nil,
+                "args" => [],
+                "type" => %{"kind" => "SCALAR", "name" => "String", "ofType" => nil},
+                "isDeprecated" => true,
+                "deprecationReason" => reason
+              }
+            ],
+            "inputFields" => nil,
+            "enumValues" => nil,
+            "possibleTypes" => nil
+          }
+        ]
+      }
+
+      {:ok, sdl} = Introspection.to_sdl(schema)
+
+      expected =
+        "@deprecated(reason: \"quote:\\\" backslash:\\\\ bs:\\b ff:\\f lf:\\n cr:\\r tab:\\t soh:\\u0001 nel:\\u0085 unicode:café\")"
+
+      assert sdl =~ expected
+      assert {:ok, _} = GraphqlQuery.Native.validate_schema(sdl, "test.graphql")
+    end
+
     test "does not emit schema definition for standard root type names" do
       json = load_fixture()
       {:ok, sdl} = Introspection.to_sdl(json)
